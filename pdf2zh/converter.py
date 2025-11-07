@@ -213,6 +213,45 @@ class TranslateConverter(PDFConverterEx):
         xt_cls: int = -1                # 上一个字符所属段落，保证无论第一个字符属于哪个类别都可以触发新段落
         vmax: float = ltpage.width / 4  # 行内公式最大宽度
         ops: str = ""                   # 渲染结果
+        vertical_chars: list[LTChar] = []  # 縦書き文字の一時バッファ
+        VERTICAL_X_THRESHOLD = 2.0
+
+        def flush_vertical_chars():
+            nonlocal vertical_chars
+            if not vertical_chars:
+                return
+            sorted_chars = sorted(vertical_chars, key=lambda ch: (-ch.y0, ch.x0))
+            # matrix[1] reflects rotation direction: positive values mean text is
+            # printed bottom-to-top (90° counter-clockwise), so flip to read left-to-right.
+            direction = vertical_chars[0].matrix[1] if vertical_chars else 0
+            if abs(direction) < 1e-6:
+                direction = vertical_chars[0].matrix[2]
+            if direction > 0:
+                sorted_chars = list(reversed(sorted_chars))
+            text = "".join(ch.get_text() for ch in sorted_chars).strip()
+            if text:
+                x0 = min(ch.x0 for ch in vertical_chars)
+                x1 = max(ch.x1 for ch in vertical_chars)
+                y0 = min(ch.y0 for ch in vertical_chars)
+                y1 = max(ch.y1 for ch in vertical_chars)
+                size = max(ch.size for ch in vertical_chars)
+                sstk.append(text)
+                pstk.append(
+                    Paragraph(
+                        sorted_chars[0].y0,
+                        sorted_chars[0].x0,
+                        x0,
+                        x1,
+                        y0,
+                        y1,
+                        size,
+                        False,
+                    )
+                )
+            vertical_chars = []
+
+        def is_vertical_glyph(char: LTChar) -> bool:
+            return abs(char.matrix[0]) < 1e-6 and abs(char.matrix[3]) < 1e-6
 
         def vflag(font: str, char: str):    # 匹配公式（和角标）字体
             if isinstance(font, bytes):     # 不一定能 decode，直接转 str
@@ -253,7 +292,18 @@ class TranslateConverter(PDFConverterEx):
         ############################################################
         # A. 原文档解析
         for child in ltpage:
+            if not isinstance(child, LTChar):
+                flush_vertical_chars()
             if isinstance(child, LTChar):
+                if is_vertical_glyph(child):
+                    if vertical_chars:
+                        last_vertical = vertical_chars[-1]
+                        if abs(child.x0 - last_vertical.x0) > VERTICAL_X_THRESHOLD:
+                            flush_vertical_chars()
+                    vertical_chars.append(child)
+                    continue
+                else:
+                    flush_vertical_chars()
                 cur_v = False
                 layout = self.layout[ltpage.pageid]
                 # ltpage.height 可能是 fig 里面的高度，这里统一用 layout.shape
@@ -269,7 +319,6 @@ class TranslateConverter(PDFConverterEx):
                     cls == 0                                                                                # 1. 类别为保留区域
                     or (cls == xt_cls and len(sstk[-1].strip()) > 1 and child.size < pstk[-1].size * 0.79)  # 2. 角标字体，有 0.76 的角标和 0.799 的大写，这里用 0.79 取中，同时考虑首字母放大的情况
                     or vflag(child.fontname, child.get_text())                                              # 3. 公式字体
-                    or (child.matrix[0] == 0 and child.matrix[3] == 0)                                      # 4. 垂直字体
                 ):
                     cur_v = True
                 # 判定括号组是否属于公式
@@ -355,6 +404,7 @@ class TranslateConverter(PDFConverterEx):
                     lstk.append(child)
             else:
                 pass
+        flush_vertical_chars()
         # 处理结尾
         if vstk:    # 公式出栈
             sstk[-1] += f"{{v{len(var)}}}"
