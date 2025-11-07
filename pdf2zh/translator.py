@@ -6,7 +6,7 @@ import re
 import unicodedata
 from copy import copy
 from string import Template
-from typing import cast
+from typing import Optional, cast
 import deepl
 import ollama
 import openai
@@ -31,6 +31,25 @@ from tenacity import wait_exponential
 
 
 logger = logging.getLogger(__name__)
+
+_RIVA_CLIENT: Optional[tuple] = None
+
+
+def _load_riva_client():
+    global _RIVA_CLIENT
+    if _RIVA_CLIENT is not None:
+        return _RIVA_CLIENT
+    try:
+        from riva.client.auth import Auth
+        from riva.client.nmt import NeuralMachineTranslationClient
+    except ModuleNotFoundError as exc:
+        raise ImportError(
+            "Riva translator requires 'nvidia-riva-client'. "
+            "Install via `pip install 'pdf2zh[local]'` to enable this service."
+        ) from exc
+
+    _RIVA_CLIENT = (Auth, NeuralMachineTranslationClient)
+    return _RIVA_CLIENT
 
 
 def remove_control_characters(s):
@@ -394,6 +413,113 @@ class XinferenceTranslator(BaseTranslator):
             except Exception as e:
                 print(e)
         raise Exception("All models failed")
+
+
+class RivaTranslator(BaseTranslator):
+    name = "riva"
+    lang_map = {
+        "en": "en-US",
+        "ja": "ja-JP",
+        "zh": "zh-CN",
+        "zh-cn": "zh-CN",
+        "zh-tw": "zh-TW",
+        "de": "de-DE",
+        "fr": "fr-FR",
+        "es": "es-ES",
+        "ko": "ko-KR",
+        "ru": "ru-RU",
+    }
+    envs = {
+        "RIVA_ENDPOINT": "localhost:50051",
+        "RIVA_MODEL": "riva_nmt_en_ja_24.10",
+        "RIVA_USE_SSL": "0",
+        "RIVA_SSL_ROOT_CERT": None,
+        "RIVA_SSL_CLIENT_CERT": None,
+        "RIVA_SSL_CLIENT_KEY": None,
+    }
+
+    def __init__(
+        self,
+        lang_in,
+        lang_out,
+        model,
+        envs=None,
+        prompt=None,
+        ignore_cache=False,
+        **kwargs,
+    ):
+        super().__init__(lang_in, lang_out, model, ignore_cache)
+        self.set_envs(envs)
+        self.model = self.model or self.envs.get("RIVA_MODEL")
+        if not self.model:
+            raise ValueError("RIVA_MODEL is missing. Please set it via env or config.")
+        endpoint = self.envs.get("RIVA_ENDPOINT")
+        if not endpoint:
+            raise ValueError("RIVA_ENDPOINT is missing. Please set it via env or config.")
+        Auth, Client = _load_riva_client()
+        auth_kwargs = {"uri": endpoint}
+
+        ssl_root = self.envs.get("RIVA_SSL_ROOT_CERT")
+        ssl_client_cert = self.envs.get("RIVA_SSL_CLIENT_CERT")
+        ssl_client_key = self.envs.get("RIVA_SSL_CLIENT_KEY")
+        use_ssl_flag = self.envs.get("RIVA_USE_SSL")
+
+        if ssl_root:
+            auth_kwargs["ssl_root_cert"] = ssl_root
+        if ssl_client_cert:
+            auth_kwargs["ssl_client_cert"] = ssl_client_cert
+        if ssl_client_key:
+            auth_kwargs["ssl_client_key"] = ssl_client_key
+
+        if any([ssl_root, ssl_client_cert, ssl_client_key]):
+            auth_kwargs["use_ssl"] = True
+        elif use_ssl_flag not in (None, "", "0", 0, False):
+            auth_kwargs["use_ssl"] = str(use_ssl_flag).lower() in ("1", "true", "yes")
+
+        self.auth = Auth(**auth_kwargs)
+        self.client = Client(self.auth)
+
+        self._language_pairs = self._load_language_pairs()
+        if (
+            self._language_pairs
+            and (self.lang_in, self.lang_out) not in self._language_pairs
+        ):
+            logger.warning(
+                "Riva model %s does not advertise %s -> %s. Proceeding anyway.",
+                self.model,
+                self.lang_in,
+                self.lang_out,
+            )
+
+    def _load_language_pairs(self):
+        try:
+            response = self.client.get_config(model=self.model)
+        except Exception as exc:  # pragma: no cover - informational logging
+            logger.debug("Failed to fetch Riva language pairs: %s", exc)
+            return None
+
+        language_pairs = getattr(response, "language_pairs", None)
+        try:
+            iterator = list(language_pairs) if language_pairs else []
+        except TypeError:  # mocks or unexpected payloads
+            logger.debug(
+                "Unexpected Riva language_pairs payload: %r", language_pairs
+            )
+            return None
+
+        pairs = {(pair.source_language, pair.target_language) for pair in iterator}
+        return pairs or None
+
+    def do_translate(self, text: str) -> str:
+        response = self.client.translate(
+            texts=[text],
+            model=self.model,
+            source_language=self.lang_in,
+            target_language=self.lang_out,
+        )
+        if not getattr(response, "texts", None):
+            raise ValueError("Riva translation returned no text.")
+        return response.texts[0]
 
 
 class OpenAITranslator(BaseTranslator):

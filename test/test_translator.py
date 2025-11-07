@@ -6,7 +6,12 @@ from ollama import ResponseError as OllamaResponseError
 
 from pdf2zh import cache
 from pdf2zh.config import ConfigManager
-from pdf2zh.translator import BaseTranslator, OllamaTranslator, OpenAIlikedTranslator
+from pdf2zh.translator import (
+    BaseTranslator,
+    OllamaTranslator,
+    OpenAIlikedTranslator,
+    RivaTranslator,
+)
 
 # Since it is necessary to test whether the functionality meets the expected requirements,
 # private functions and private methods are allowed to be called.
@@ -222,6 +227,54 @@ class TestOllamaTranslator(unittest.TestCase):
         self.assertEqual(
             excepted_not_retain_cot_content, only_removed_cot_content.strip()
         )
+
+
+class TestRivaTranslator(unittest.TestCase):
+    def setUp(self):
+        self.mock_auth_cls = mock.Mock(name="Auth")
+        self.mock_client_cls = mock.Mock(name="Client")
+        self.mock_auth_instance = self.mock_auth_cls.return_value
+        self.mock_client_instance = self.mock_client_cls.return_value
+
+    def test_missing_dependency_raises(self):
+        with mock.patch(
+            "pdf2zh.translator._load_riva_client", side_effect=ImportError("missing")
+        ):
+            with self.assertRaises(ImportError):
+                RivaTranslator(
+                    lang_in="en",
+                    lang_out="ja",
+                    model=None,
+                    envs={"RIVA_ENDPOINT": "lab:50051", "RIVA_MODEL": "model"},
+                    ignore_cache=True,
+                )
+
+    def test_translate_invokes_riva_client(self):
+        with mock.patch(
+            "pdf2zh.translator._load_riva_client",
+            return_value=(self.mock_auth_cls, self.mock_client_cls),
+        ):
+            self.mock_client_instance.translate.return_value = mock.Mock(
+                texts=["こんにちは"]
+            )
+            translator = RivaTranslator(
+                lang_in="en",
+                lang_out="ja",
+                model=None,
+                envs={"RIVA_ENDPOINT": "lab:50051", "RIVA_MODEL": "model"},
+            )
+            translator.cache = mock.Mock()
+            translator.cache.get.return_value = None
+            result = translator.translate("Hello world")
+            self.mock_auth_cls.assert_called_once_with(uri="lab:50051")
+            self.mock_client_cls.assert_called_once_with(self.mock_auth_instance)
+            self.mock_client_instance.translate.assert_called_once_with(
+                texts=["Hello world"],
+                model="model",
+                source_language="en-US",
+                target_language="ja-JP",
+            )
+            self.assertEqual("こんにちは", result)
 
 
 if __name__ == "__main__":

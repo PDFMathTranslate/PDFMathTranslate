@@ -14,6 +14,7 @@
 - [独自の設定ファイル](#cofig)
 - [フォントサブセット化](#fonts-subset)
 - [翻訳キャッシュ](#cache)
+- [Riva サーバーの準備](#riva-hosting)
 - [公開サービスとしての運用](#public-services)
 - [MCP 連携](#mcp)
 
@@ -76,6 +77,7 @@ pdf2zh example.pdf -li en -lo ja
 | **AILS**               | `ails`             | `AILS_API_KEY`, `AILS_MODEL`                                           | `[Your Key]`, `gpt-4o-mini`                               | [AILS](https://ails.tokyo/) を参照                                                                                                                                                                       |
 | **LingvaNex**          | `lingvanex`        | `LINGVANEX_KEY`, `LINGVANEX_HOST`, `LINGVANEX_PROJECT_ID`              | `[Your Key]`, `https://api.lingvanex.com`, `[Project ID]` | [LingvaNex](https://lingvanex.com/) を参照                                                                                                                                                               |
 | **Argos Translate**    | `argostranslate`   | なし（`pdf2zh[argostranslate]` のインストールが必要）                   | N/A                                                       | ローカル翻訳エンジン。初回は追加言語パックのダウンロードが必要です。                                                                                                                                    |
+| **NVIDIA Riva**        | `riva`             | `RIVA_ENDPOINT`, `RIVA_MODEL`, `RIVA_USE_SSL`, `RIVA_SSL_ROOT_CERT`, `RIVA_SSL_CLIENT_CERT`, `RIVA_SSL_CLIENT_KEY` | `localhost:50051`, `riva_nmt_en_ja_24.10`, `0`, `None`, `None`, `None` | [Riva Quick Start](https://docs.nvidia.com/deeplearning/riva/user-guide/docs/quick-start-guide/nmt.html) で立ち上げた翻訳サーバーが必要です。 |
 
 [⬆️ トップへ戻る](#toc)
 
@@ -88,6 +90,24 @@ pdf2zh example.pdf -li en -lo ja
 ```bash
 pdf2zh example.pdf --except 1-3,5
 ```
+
+[⬆️ トップへ戻る](#toc)
+
+---
+
+<h3 id="riva-hosting">Riva サーバーの準備</h3>
+
+1. `pip install "pdf2zh[local]"` で Python 依存を追加し、その上で NVIDIA Container Toolkit・Docker・NGC CLI をインストールして `ngc config set` で API キーを登録します。
+2. Quick Start パッケージを取得し、翻訳モデルを展開します。
+   ```bash
+   export RIVA_VERSION=2.23.0
+   ngc registry resource download-version "nvidia/riva/riva_quickstart:${RIVA_VERSION}" --dest ~/riva_quickstart
+   cd ~/riva_quickstart
+   ./riva_init.sh --models "nmt_en_ja,nmt_ja_en" --deploy-type gpu --accept-eula
+   ```
+3. `./riva_start.sh` でサーバーを起動（既定は `localhost:50051`）。別ホストで動かす場合はそのアドレスを `RIVA_ENDPOINT` に指定します。
+4. PDFMathTranslate では `--service riva` あるいは `-s riva:riva_nmt_en_ja_24.10` を指定し、`RIVA_MODEL` で利用する RMIR 名を切り替えます。
+5. `ListSupportedLanguagePairs` API で対応言語ペアを確認しておくと、`lang_in` / `lang_out` のミスマッチによる失敗を防げます。
 
 [⬆️ トップへ戻る](#toc)
 

@@ -50,6 +50,9 @@ argostranslate = [
 mcp = [
     "mcp>=1.6.0",
 ]
+local = [
+    "nvidia-riva-client>=2.23.0",
+]
 
 [dependency-groups]
 dev = [

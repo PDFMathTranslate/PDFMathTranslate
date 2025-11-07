@@ -5,6 +5,7 @@ Core logic sits in `pdf2zh/`: `pdf2zh/pdf2zh.py` drives the CLI, `converter.py` 
 
 ## Build, Test, and Development Commands
 - `uv pip install --group dev` pulls the dev toolchain (`pytest`, `black`, `flake8`, `pre-commit`).
+- `uv pip install --group local` installs optional local-model dependencies (e.g., `nvidia-riva-client`).
 - `pdf2zh sample.pdf -o out/` exercises the CLI and writes translated assets to `out/`.
 - `pytest test/` runs the automated test suite; add `-k <keyword>` for targeted runs.
 - `python -m build` validates packaging before releasing, and `docker compose up` spins up the demo stack.

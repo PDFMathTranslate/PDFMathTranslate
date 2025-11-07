@@ -14,6 +14,7 @@
 - [Custom configuration file](#cofig)
 - [Fonts Subseting](#fonts-subset)
 - [Translation cache](#cache)
+- [Self-hosted Riva quick start](#riva-hosting)
 
 ---
 
@@ -71,6 +72,7 @@ We've provided a detailed table on the required [environment variables](https://
 | **Dify**             | `dify`         | `DIFY_API_URL`, `DIFY_API_KEY`                                        | `[Your DIFY URL]`, `[Your Key]`                          | See [Dify](https://github.com/langgenius/dify),Three variables, lang_out, lang_in, and text, need to be defined in Dify's workflow input.                                                                 |
 | **AnythingLLM**      | `anythingllm`  | `AnythingLLM_URL`, `AnythingLLM_APIKEY`                               | `[Your AnythingLLM URL]`, `[Your Key]`                   | See [anything-llm](https://github.com/Mintplex-Labs/anything-llm)                                                                                                                                         |
 |**Argos Translate**|`argos`| | |See [argos-translate](https://github.com/argosopentech/argos-translate)|
+|**NVIDIA Riva**|`riva`|`RIVA_ENDPOINT`, `RIVA_MODEL`, `RIVA_USE_SSL`, `RIVA_SSL_ROOT_CERT`, `RIVA_SSL_CLIENT_CERT`, `RIVA_SSL_CLIENT_KEY`|`localhost:50051`, `riva_nmt_en_ja_24.10`, `0`, `None`, `None`, `None`|Requires a self-hosted [Riva Quick Start](https://docs.nvidia.com/deeplearning/riva/user-guide/docs/quick-start-guide/nmt.html) deployment with NMT models loaded.|
 |**Grok**|`grok`| `GORK_API_KEY`, `GORK_MODEL` | `[Your GORK_API_KEY]`, `grok-2-1212` |See [Grok](https://docs.x.ai/docs/overview)|
 |**Groq**|`groq`| `GROQ_API_KEY`, `GROQ_MODEL` | `[Your GROQ_API_KEY]`, `llama-3-3-70b-versatile` |See [Groq](https://console.groq.com/docs/models)|
 |**DeepSeek**|`deepseek`| `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | `[Your DEEPSEEK_API_KEY]`, `deepseek-chat` |See [DeepSeek](https://www.deepseek.com/)|
@@ -98,6 +100,20 @@ For PowerShell user:
 $env:OPENAI_MODEL = gpt-4o-mini
 pdf2zh example.pdf -s openai
 ```
+
+<h3 id="riva-hosting">Self-hosted Riva quick start</h3>
+
+1. Install the optional Python dependency with `pip install "pdf2zh[local]"`, plus NVIDIA Container Toolkit, Docker, and the NGC CLI (run `ngc config set` to store your API key).
+2. Download the quick start package and initialize the desired NMT models:
+   ```bash
+   export RIVA_VERSION=2.23.0
+   ngc registry resource download-version "nvidia/riva/riva_quickstart:${RIVA_VERSION}" --dest ~/riva_quickstart
+   cd ~/riva_quickstart
+   ./riva_init.sh --models "nmt_en_ja,nmt_ja_en" --deploy-type gpu --accept-eula
+   ```
+3. Start the gRPC server (`./riva_start.sh` → default `localhost:50051`) and keep it running wherever your GPU lives.
+4. Point PDFMathTranslate to that endpoint via `RIVA_ENDPOINT=host:50051`, select the deployed RMIR with `RIVA_MODEL`, and choose `--service riva` (or `-s riva:riva_nmt_en_ja_24.10`).
+5. Optionally, call `ListSupportedLanguagePairs` via `riva_nmt.pb2` to verify which `lang_in`/`lang_out` pairs your model exposes before launching a long translation job.
 
 [⬆️ Back to top](#toc)
 
