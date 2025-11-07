@@ -183,6 +183,18 @@ class BaseTranslator:
         ) + self.get_rich_text_right_placeholder(id)
 
 
+class NoopTranslator(BaseTranslator):
+    """Translator that returns the input text unchanged."""
+
+    name = "noop"
+
+    def __init__(self, lang_in, lang_out, model=None, ignore_cache=False, **kwargs):
+        super().__init__(lang_in, lang_out, model, ignore_cache)
+
+    def do_translate(self, text: str) -> str:
+        return text
+
+
 class GoogleTranslator(BaseTranslator):
     name = "google"
     lang_map = {"zh": "zh-CN"}

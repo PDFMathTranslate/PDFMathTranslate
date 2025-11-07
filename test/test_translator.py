@@ -8,6 +8,7 @@ from pdf2zh import cache
 from pdf2zh.config import ConfigManager
 from pdf2zh.translator import (
     BaseTranslator,
+    NoopTranslator,
     OllamaTranslator,
     OpenAIlikedTranslator,
     RivaTranslator,
@@ -86,6 +87,11 @@ class TestTranslator(unittest.TestCase):
         translator = BaseTranslator("en", "zh", "test", False)
         with self.assertRaises(NotImplementedError):
             translator.translate("Hello World")
+
+    def test_noop_translator(self):
+        translator = NoopTranslator("en", "zh", None, False)
+        text = "Sample text"
+        self.assertEqual(text, translator.translate(text))
 
 
 class TestOpenAIlikedTranslator(unittest.TestCase):

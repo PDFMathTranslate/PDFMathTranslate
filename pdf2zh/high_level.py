@@ -25,6 +25,7 @@ from pymupdf import Document, Font
 from pdf2zh.converter import TranslateConverter
 from pdf2zh.doclayout import OnnxModel
 from pdf2zh.pdfinterp import PDFPageInterpreterEx
+from pdf2zh.markdown import export_markdown
 
 from pdf2zh.config import ConfigManager
 from babeldoc.assets.assets import get_font_and_metadata
@@ -317,6 +318,7 @@ def translate(
     prompt: Template = None,
     skip_subset_fonts: bool = False,
     ignore_cache: bool = False,
+    output_format: str = "pdf",
     **kwarg: Any,
 ):
     if not files:
@@ -329,6 +331,10 @@ def translate(
         for file in missing_files:
             print(f"  {file}", file=sys.stderr)
         raise PDFValueError("Some files do not exist.")
+
+    output_mode = (output_format or "pdf").lower()
+    emit_pdf = output_mode in ("pdf", "both")
+    emit_markdown = output_mode in ("md", "both")
 
     result_files = []
 
@@ -384,15 +390,39 @@ def translate(
             s_raw,
             **locals(),
         )
-        file_mono = Path(output) / f"{filename}-mono.pdf"
-        file_dual = Path(output) / f"{filename}-dual.pdf"
-        doc_mono = open(file_mono, "wb")
-        doc_dual = open(file_dual, "wb")
-        doc_mono.write(s_mono)
-        doc_dual.write(s_dual)
-        doc_mono.close()
-        doc_dual.close()
-        result_files.append((str(file_mono), str(file_dual)))
+        artifacts: dict = {}
+        pdf_tuple: Optional[tuple[str, str]] = None
+        output_dir = Path(output) if output else Path(".")
+
+        if emit_pdf:
+            file_mono = output_dir / f"{filename}-mono.pdf"
+            file_dual = output_dir / f"{filename}-dual.pdf"
+            file_mono.parent.mkdir(parents=True, exist_ok=True)
+            file_dual.parent.mkdir(parents=True, exist_ok=True)
+            with open(file_mono, "wb") as doc_mono:
+                doc_mono.write(s_mono)
+            with open(file_dual, "wb") as doc_dual:
+                doc_dual.write(s_dual)
+            pdf_tuple = (str(file_mono), str(file_dual))
+            artifacts["pdf"] = {
+                "mono": str(file_mono),
+                "dual": str(file_dual),
+            }
+
+        if emit_markdown:
+            doc_for_md = Document(stream=s_mono)
+            try:
+                md_path = export_markdown(doc_for_md, output_dir, filename)
+            finally:
+                doc_for_md.close()
+            artifacts["markdown"] = str(md_path)
+
+        if emit_markdown:
+            result_files.append(artifacts)
+        elif pdf_tuple:
+            result_files.append(pdf_tuple)
+        else:
+            result_files.append({})
 
     return result_files
 

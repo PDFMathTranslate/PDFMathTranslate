@@ -9,6 +9,7 @@
 - [翻訳サービスの切り替え](#services)
 - [例外のある翻訳](#exceptions)
 - [マルチスレッド処理](#threads)
+- [出力フォーマットとMarkdown](#output-format)
 - [カスタムプロンプト](#prompt)
 - [認証](#auth)
 - [独自の設定ファイル](#cofig)
@@ -120,6 +121,34 @@ pdf2zh example.pdf --except 1-3,5
 ```bash
 pdf2zh example.pdf -t 4
 ```
+
+[⬆️ トップへ戻る](#toc)
+
+---
+
+<h3 id="output-format">出力フォーマットとMarkdown</h3>
+
+- 翻訳済みPDFのみ生成（既定）
+
+  ```bash
+  pdf2zh example.pdf --output-format pdf
+  ```
+
+- PDFとMarkdownを同時に書き出す
+
+  ```bash
+  pdf2zh example.pdf --output-format both
+  ```
+
+  Markdown（`example.md`）と画像ファイルは `-o/--output` で指定したディレクトリに保存されます。PDFが不要な場合は `md` を指定してください。
+
+- 翻訳をスキップしてレイアウトだけ確認する
+
+  ```bash
+  pdf2zh example.pdf --no-translate --output-format md
+  ```
+
+  翻訳サービスを呼び出さずに元の文字列を再利用するため、レイアウト検証やデバッグ時に API コストをかけずに PDF / Markdown を生成できます。
 
 [⬆️ トップへ戻る](#toc)
 

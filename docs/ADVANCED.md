@@ -9,6 +9,7 @@
 - [Translate with different services](#services)
 - [Translate wih exceptions](#exceptions)
 - [Multi-threads](#threads)
+- [Output formats & Markdown](#output-format)
 - [Custom prompt](#prompt)
 - [Authorization](#auth)
 - [Custom configuration file](#cofig)
@@ -144,6 +145,34 @@ Use `-t` to specify how many threads to use in translation:
 ```bash
 pdf2zh example.pdf -t 1
 ```
+
+[⬆️ Back to top](#toc)
+
+---
+
+<h3 id="output-format">Output formats & Markdown</h3>
+
+- Generate only translated PDFs (default)
+
+  ```bash
+  pdf2zh example.pdf --output-format pdf
+  ```
+
+- Export Markdown together with PDFs
+
+  ```bash
+  pdf2zh example.pdf --output-format both
+  ```
+
+  Markdown (`example.md`) and its assets land in the same `-o/--output` directory. Use `md` if you only need Markdown without PDFs.
+
+- Skip translation and keep the original text (layout/debug mode)
+
+  ```bash
+  pdf2zh example.pdf --no-translate --output-format md
+  ```
+
+  This routes the content through the pipeline once, reusing the source strings so that layout information (PDF/Markdown) can be inspected without hitting any translator.
 
 [⬆️ Back to top](#toc)
 

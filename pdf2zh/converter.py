@@ -31,6 +31,7 @@ from pdf2zh.translator import (
     GrokTranslator,
     GroqTranslator,
     ModelScopeTranslator,
+    NoopTranslator,
     OllamaTranslator,
     OpenAIlikedTranslator,
     OpenAITranslator,
@@ -184,6 +185,7 @@ class TranslateConverter(PDFConverterEx):
             DeepseekTranslator,
             OpenAIlikedTranslator,
             QwenMtTranslator,
+            NoopTranslator,
             X302AITranslator,
         ]:
             if service_name == translator.name:

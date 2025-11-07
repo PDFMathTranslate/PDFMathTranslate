@@ -23,6 +23,6 @@ RUN uv pip install --system --no-cache -r pyproject.toml && babeldoc --version &
 
 COPY . .
 
-RUN uv pip install --system --no-cache . && uv pip install --system --no-cache -U "babeldoc<0.3.0" "pymupdf<1.25.3" "pdfminer-six==20250416" && babeldoc --version && babeldoc --warmup
+RUN uv pip install --system --no-cache . && uv pip install --system --no-cache -U "babeldoc<0.3.0" "pymupdf>=1.26.6" "pdfminer-six==20250416" && babeldoc --version && babeldoc --warmup
 
 CMD ["pdf2zh", "-i"]

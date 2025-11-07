@@ -258,10 +258,12 @@ In the following table, we list all advanced options for reference:
 | `-i`                  | [Enter GUI](#gui)                                                                                             | `pdf2zh -i`                                    |
 | `-p`                  | [Partial document translation](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#partial) | `pdf2zh example.pdf -p 1`                      |
 | `-li`                 | [Source language](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#languages)            | `pdf2zh example.pdf -li en`                    |
-| `-lo`                 | [Target language](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#languages)            | `pdf2zh example.pdf -lo zh`                    |
+| `-lo`                 | [Target language](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#languages)            | `pdf2zh example.pdf -lo ja`                    |
 | `-s`                  | [Translation service](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#services)         | `pdf2zh example.pdf -s deepl`                  |
 | `-t`                  | [Multi-threads](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#threads)                | `pdf2zh example.pdf -t 1`                      |
 | `-o`                  | Output dir                                                                                                    | `pdf2zh example.pdf -o output`                 |
+| `--output-format`     | Choose translated artifact: pdf / md / both                                                                   | `pdf2zh example.pdf --output-format both`      |
+| `--no-translate`      | Skip translation and reuse source text (layout debugging)                                                     | `pdf2zh example.pdf --no-translate`            |
 | `-f`, `-c`            | [Exceptions](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#exceptions)                | `pdf2zh example.pdf -f "(MS.*)"`               |
 | `-cp`                 | Compatibility Mode                                                                                            | `pdf2zh example.pdf --compatible`              |
 | `--skip-subset-fonts` | [Skip font subset](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#font-subset)         | `pdf2zh example.pdf --skip-subset-fonts`       |

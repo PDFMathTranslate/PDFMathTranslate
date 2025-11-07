@@ -13,7 +13,7 @@ classifiers = [
 dependencies = [
     "requests",
     # for arm64 linux whells
-    "pymupdf<1.25.3",
+    "pymupdf>=1.26.6",
     "tqdm",
     "tenacity",
     "numpy",
@@ -36,6 +36,7 @@ dependencies = [
     "fontTools",
     "babeldoc>=0.1.22, <0.3.0",
     "rich",
+    "pymupdf4llm>=0.1.8",
 ]
 
 [project.optional-dependencies]

@@ -82,7 +82,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--lang-out",
         "-lo",
         type=str,
-        default="zh",
+        default="ja",
         help="The code of target language.",
     )
     parse_params.add_argument(
@@ -98,6 +98,17 @@ def create_parser() -> argparse.ArgumentParser:
         type=str,
         default="",
         help="Output directory for files.",
+    )
+    parse_params.add_argument(
+        "--output-format",
+        choices=["pdf", "md", "both"],
+        default="pdf",
+        help="Select translated output format.",
+    )
+    parse_params.add_argument(
+        "--no-translate",
+        action="store_true",
+        help="Skip translation and reuse original text (for layout debugging).",
     )
     parse_params.add_argument(
         "--thread",
@@ -260,6 +271,9 @@ def main(args: Optional[List[str]] = None) -> int:
 
     parsed_args = parse_args(args)
 
+    if parsed_args.no_translate:
+        parsed_args.service = "noop"
+
     if parsed_args.config:
         ConfigManager.custome_config(parsed_args.config)
 
@@ -378,9 +392,10 @@ def yadt_main(parsed_args) -> int:
         AnythingLLMTranslator,
         XinferenceTranslator,
         ArgosTranslator,
-        GrokTranslator,
-        GroqTranslator,
-        DeepseekTranslator,
+    GrokTranslator,
+    GroqTranslator,
+    NoopTranslator,
+    DeepseekTranslator,
         OpenAIlikedTranslator,
         QwenMtTranslator,
         X302AITranslator,
@@ -409,6 +424,7 @@ def yadt_main(parsed_args) -> int:
         DeepseekTranslator,
         OpenAIlikedTranslator,
         QwenMtTranslator,
+        NoopTranslator,
         X302AITranslator,
     ]:
         if service_name == translator.name:
