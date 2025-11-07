@@ -38,6 +38,17 @@ with open("example.pdf", "rb") as f:
     (stream_mono, stream_dual) = translate_stream(stream=f.read(), **params)
 ```
 
+### 自己ホスト版 NVIDIA Riva
+
+Riva Quick Start などで翻訳サーバーを用意している場合は、次の手順で Python / CLI から呼び出せます。
+
+1. 追加依存をインストールします: `pip install "pdf2zh[local]"`（もしくはリポジトリ直下で `uv pip install --editable ".[local]"`）。
+2. 環境変数を設定します。
+   - `RIVA_ENDPOINT`（例: `lab-gpu-01:50051`）
+   - `RIVA_MODEL`（例: `riva_nmt_en_ja_24.10`）
+   - 必要に応じて `RIVA_USE_SSL`, `RIVA_SSL_ROOT_CERT`, `RIVA_SSL_CLIENT_CERT`, `RIVA_SSL_CLIENT_KEY`
+3. `service="riva"`（CLI では `-s riva[:model]`）を指定すると、gRPC 経由で翻訳リクエストを送信します。
+
 [⬆️ トップへ戻る](#toc)
 
 ---

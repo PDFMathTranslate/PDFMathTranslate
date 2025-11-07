@@ -276,6 +276,41 @@ class TestRivaTranslator(unittest.TestCase):
             )
             self.assertEqual("こんにちは", result)
 
+    def test_translate_connection_failure(self):
+        with mock.patch(
+            "pdf2zh.translator._load_riva_client",
+            return_value=(self.mock_auth_cls, self.mock_client_cls),
+        ):
+            self.mock_client_instance.translate.side_effect = RuntimeError("boom")
+            translator = RivaTranslator(
+                lang_in="en",
+                lang_out="ja",
+                model=None,
+                envs={"RIVA_ENDPOINT": "lab:50051", "RIVA_MODEL": "model"},
+            )
+            translator.cache = mock.Mock()
+            translator.cache.get.return_value = None
+            with self.assertRaises(RuntimeError):
+                translator.translate("Hello")
+
+    def test_language_pair_warning(self):
+        pair = mock.Mock(source_language="de-DE", target_language="en-US")
+        with mock.patch(
+            "pdf2zh.translator._load_riva_client",
+            return_value=(self.mock_auth_cls, self.mock_client_cls),
+        ):
+            self.mock_client_instance.get_config.return_value = mock.Mock(
+                language_pairs=[pair]
+            )
+            with self.assertLogs("pdf2zh.translator", level="WARNING") as logs:
+                RivaTranslator(
+                    lang_in="en",
+                    lang_out="ja",
+                    model=None,
+                    envs={"RIVA_ENDPOINT": "lab:50051", "RIVA_MODEL": "model"},
+                )
+            self.assertTrue(any("does not advertise" in msg for msg in logs.output))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,6 +34,17 @@ with open('example.pdf', 'rb') as f:
     (stream_mono, stream_dual) = translate_stream(stream=f.read(), **params)
 ```
 
+### Self-hosted NVIDIA Riva
+
+If you operate an NVIDIA Riva translation server (for example via [Riva Quick Start](https://docs.nvidia.com/deeplearning/riva/user-guide/docs/quick-start-guide/nmt.html)), you can access it with the standard APIs:
+
+1. Install the optional dependency: `pip install "pdf2zh[local]"` (or `uv pip install --editable ".[local]"` when working in this repo).
+2. Set the environment variables before invoking `translate(...)` or the CLI:
+   - `RIVA_ENDPOINT` (e.g., `lab-gpu-01:50051`)
+   - `RIVA_MODEL` (e.g., `riva_nmt_en_ja_24.10`)
+   - Optional: `RIVA_USE_SSL`, `RIVA_SSL_ROOT_CERT`, `RIVA_SSL_CLIENT_CERT`, `RIVA_SSL_CLIENT_KEY`
+3. Use `service='riva'` in the Python parameters (or `-s riva[:model]` on the CLI). PDFMathTranslate will connect to the gRPC endpoint and send `TranslateTextRequest` payloads to your server.
+
 [⬆️ Back to top](#toc)
 
 ---

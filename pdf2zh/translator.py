@@ -448,14 +448,14 @@ class RivaTranslator(BaseTranslator):
         ignore_cache=False,
         **kwargs,
     ):
-        super().__init__(lang_in, lang_out, model, ignore_cache)
         self.set_envs(envs)
-        self.model = self.model or self.envs.get("RIVA_MODEL")
-        if not self.model:
+        resolved_model = model or self.envs.get("RIVA_MODEL")
+        if not resolved_model:
             raise ValueError("RIVA_MODEL is missing. Please set it via env or config.")
         endpoint = self.envs.get("RIVA_ENDPOINT")
         if not endpoint:
             raise ValueError("RIVA_ENDPOINT is missing. Please set it via env or config.")
+        super().__init__(lang_in, lang_out, resolved_model, ignore_cache)
         Auth, Client = _load_riva_client()
         auth_kwargs = {"uri": endpoint}
 

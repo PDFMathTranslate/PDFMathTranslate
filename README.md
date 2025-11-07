@@ -280,6 +280,17 @@ In the following table, we list all advanced options for reference:
 
 For detailed explanations, please refer to our document about [Advanced Usage](./docs/ADVANCED.md) for a full list of each option.
 
+#### Self-hosted NVIDIA Riva (beta)
+
+- Install optional dependencies: `pip install "pdf2zh[local]"` (or `uv pip install --editable ".[local]"` inside this repo).
+- Start an [NVIDIA Riva Quick Start](https://docs.nvidia.com/deeplearning/riva/user-guide/docs/quick-start-guide/nmt.html) server with the desired RMIR (e.g., `riva_nmt_en_ja_24.10`), then set:
+  ```bash
+  export RIVA_ENDPOINT=lab-gpu-01:50051
+  export RIVA_MODEL=riva_nmt_en_ja_24.10
+  pdf2zh example.pdf -li en -lo ja -s riva
+  ```
+- TLS-protected deployments can also set `RIVA_USE_SSL`, `RIVA_SSL_ROOT_CERT`, etc. See [docs/ADVANCED.md#riva-hosting](docs/ADVANCED.md#riva-hosting) for the full walkthrough.
+
 <h3 id="downstream">4.2 Downstream Development</h3>
 For downstream applications, please refer to our document about [API Details](./docs/APIS.md) for further information about:
 
