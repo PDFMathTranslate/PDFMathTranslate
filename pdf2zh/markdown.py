@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -10,8 +9,14 @@ import re
 
 import pymupdf
 import pymupdf4llm
-PREFIX_CHARS = set("#>+-*0123456789. \t•")
+
+PREFIX_CHARS = set("#>+-0123456789. \t")
 WRAPPER_TOKENS = ("**", "__", "~~", "`", "_")
+PLACEHOLDER_PATTERNS = (
+    re.compile(r"^\*\*==>"),
+    re.compile(r"^\*\*figure", re.IGNORECASE),
+    re.compile(r"^\*\*table", re.IGNORECASE),
+)
 
 
 def export_markdown(
@@ -40,18 +45,16 @@ def export_markdown(
         raise ValueError("write_images and embed_images cannot both be True")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    assets_dir: Optional[Path] = None
     image_path = output_dir
+    assets_rel: Optional[Path] = None
+    image_dir_token: Optional[str] = None
 
-    assets_rel = None
-    image_dir_token = None
-    output_dir_abs = output_dir.resolve()
-    assets_dir = None
     if write_images:
         assets_dir = output_dir / f"{base_name}_assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        output_dir_abs = output_dir.resolve()
         assets_rel = Path(os.path.relpath(assets_dir.resolve(), output_dir_abs))
         image_dir_token = assets_dir.as_posix()
-        assets_dir.mkdir(parents=True, exist_ok=True)
         image_path = assets_dir
 
     safe_pdf_name = f"{base_name.replace(' ', '-')}.pdf"
@@ -66,6 +69,7 @@ def export_markdown(
     )
 
     if reference_doc is not None:
+        # Reference Markdown is used purely for styling cues, so image extraction is unnecessary.
         reference_markdown = pymupdf4llm.to_markdown(
             reference_doc,
             filename=safe_pdf_name,
@@ -109,10 +113,11 @@ def _merge_markdown(reference_text: str, translated_text: str) -> str:
         stripped_ref = ref_line.strip()
         stripped_trans = trans_line.strip()
 
-        if stripped_ref.startswith("**==>") or stripped_ref.startswith("**Figure"):
+        if _is_placeholder(stripped_ref):
             merged_lines.append(trans_line)
             ref_idx += 1
-            trans_idx += 1 if trans_idx < trans_len else 0
+            if trans_idx < trans_len:
+                trans_idx += 1
             continue
 
         if ref_idx >= ref_len:
@@ -122,8 +127,8 @@ def _merge_markdown(reference_text: str, translated_text: str) -> str:
         if trans_idx >= trans_len:
             break
 
-        ref_blank = not stripped_ref
-        trans_blank = not stripped_trans
+        ref_blank = is_blank(ref_line)
+        trans_blank = is_blank(trans_line)
         ref_header = stripped_ref.startswith("#")
         trans_header = stripped_trans.startswith("#")
 
@@ -140,9 +145,13 @@ def _merge_markdown(reference_text: str, translated_text: str) -> str:
             trans_idx += 1
             continue
         if ref_header and not trans_header:
-            merged_lines.append(_apply_reference_header(ref_line, trans_line))
+            if trans_blank:
+                merged_lines.append(_apply_reference_header(ref_line, trans_line))
+                trans_idx += 1
+            else:
+                merged_lines.append(trans_line)
+                trans_idx += 1
             ref_idx += 1
-            trans_idx += 1
             continue
         if trans_header and not ref_header:
             merged_lines.append(trans_line)
@@ -183,7 +192,7 @@ def _merge_line(reference_line: str, translated_line: str) -> str:
 
     core = trans_body
     leading_ws = len(core) - len(core.lstrip(" "))
-    trailing_ws = len(core.rstrip(" ")) - len(core.strip(" "))
+    trailing_ws = len(core) - len(core.rstrip(" "))
     inner = core.strip()
 
     existing_wrappers, _ = _extract_wrappers(trans_body.strip())
@@ -201,6 +210,7 @@ def _merge_line(reference_line: str, translated_line: str) -> str:
 
 
 def _extract_prefix(line: str) -> tuple[str, str]:
+    """Return (prefix, body) where prefix contains heading/list markers."""
     idx = 0
     while idx < len(line) and line[idx] in PREFIX_CHARS:
         idx += 1
@@ -208,6 +218,7 @@ def _extract_prefix(line: str) -> tuple[str, str]:
 
 
 def _extract_wrappers(text: str) -> tuple[list[str], str]:
+    """Peel matching wrappers (**, __, ~~ …) from both ends of the text."""
     wrappers: list[str] = []
     while text:
         for token in WRAPPER_TOKENS:
@@ -223,6 +234,7 @@ def _extract_wrappers(text: str) -> tuple[list[str], str]:
 
 
 def _apply_wrappers(content: str, wrappers: list[str]) -> str:
+    """Reapply wrappers to content in their original nesting order."""
     result = content
     for token in reversed(wrappers):
         result = f"{token}{result}{token}"
@@ -230,6 +242,7 @@ def _apply_wrappers(content: str, wrappers: list[str]) -> str:
 
 
 def _rewrite_image_paths(markdown_text: str, assets_rel: Path | None) -> str:
+    """Repoint image references to the generated assets directory."""
     if not assets_rel:
         return markdown_text
 
@@ -275,3 +288,11 @@ def _promote_primary_heading(markdown_text: str) -> str:
             lines[idx] = (" " * leading) + "# " + stripped[3:]
             break
     return "\n".join(lines)
+
+
+def _is_placeholder(line: str) -> bool:
+    """Return True if line matches a known placeholder pattern."""
+    normalized = line.strip()
+    if not normalized:
+        return False
+    return any(pattern.match(normalized) for pattern in PLACEHOLDER_PATTERNS)
