@@ -7,7 +7,7 @@ This project is distributed under the terms of the GNU Affero General Public Lic
 | **PyMuPDF** (`pymupdf` ≥ 1.26.6) | Dual License: AGPLv3 _or_ Artifex Commercial License | AGPL text bundled with the package; commercial licenses available from [Artifex](https://artifex.com/licensing/). |
 | **pymupdf4llm** ≥ 0.1.8 | Dual License: AGPLv3 _or_ Artifex Commercial License | Ships with `pymupdf4llm-<version>.dist-info/licenses/LICENSE` (AGPLv3). Requires PyMuPDF. |
 | **tabulate** | MIT License | SPDX: MIT. See [pypi.org/project/tabulate](https://pypi.org/project/tabulate/) for the full text. |
-| **PDFMathTranslate (upstream fork)** | AGPLv3 | Original project at [Byaidu/PDFMathTranslate](https://github.com/Byaidu/PDFMathTranslate) distributes under AGPLv3; this fork inherits the same terms. |
+| **PDFMathTranslate (upstream fork)** | AGPLv3 | Original project at [Byaidu/PDFMathTranslate](https://github.com/Byaidu/PDFMathTranslate) distributes under AGPLv3; this fork inherits the same terms and must retain upstream copyright notices. |
 
 When redistributing binaries (e.g., Docker images or packaged executables):
 
@@ -15,4 +15,4 @@ When redistributing binaries (e.g., Docker images or packaged executables):
 2. If you choose the Artifex commercial route for PyMuPDF / pymupdf4llm, ensure your downstream documentation reflects the commercial license terms and retain proof of purchase.
 3. Provide source access as required by AGPLv3 when hosting network services based on this project.
 
-For questions about commercial licensing of PyMuPDF or pymupdf4llm, contact Artifex Software at [support@artifex.com](mailto:support@artifex.com).
+For questions about commercial licensing of PyMuPDF or pymupdf4llm, contact Artifex Software at [support@artifex.com](mailto:support@artifex.com). For upstream project licensing matters, consult the original PDFMathTranslate repository and include its attribution when reusing branding or assets.
