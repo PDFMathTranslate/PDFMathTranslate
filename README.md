@@ -371,7 +371,12 @@ This work has been accepted by the *Proceedings of the 2025 Conference on Empiri
 
 - Multilingual Font: [Go Noto Universal](https://github.com/satbyy/go-noto-universal)
 
-<h3 id="contrib">5.3 Contributors</h3>
+<h3 id="license">5.3 License & Notices</h3>
+
+- This fork is distributed under the [GNU Affero General Public License v3.0](./LICENSE).
+- Dual-licensed dependencies such as PyMuPDF / pymupdf4llm, along with other bundled libraries, are listed in [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md) for easy attribution when redistributing binaries or Docker images.
+
+<h3 id="contrib">5.4 Contributors</h3>
 
 <a href="https://github.com/Byaidu/PDFMathTranslate/graphs/contributors">
   <img src="https://opencollective.com/PDFMathTranslate/contributors.svg?width=890&button=false" />
@@ -382,7 +387,7 @@ This work has been accepted by the *Proceedings of the 2025 Conference on Empiri
 For details on how to contribute, please consult the [Contribution Guide](https://github.com/Byaidu/PDFMathTranslate/wiki/Contribution-Guide---%E8%B4%A1%E7%8C%AE%E6%8C%87%E5%8D%97).
 
 
-<h3 id="star_hist">5.4 Star History</h3>
+<h3 id="star_hist">5.5 Star History</h3>
 
 <a href="https://star-history.com/#Byaidu/PDFMathTranslate&Date">
  <picture>
