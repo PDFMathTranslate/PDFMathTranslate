@@ -411,10 +411,17 @@ def translate(
 
         if emit_markdown:
             doc_for_md = Document(stream=s_mono)
+            reference_doc = Document(stream=s_raw)
             try:
-                md_path = export_markdown(doc_for_md, output_dir, filename)
+                md_path = export_markdown(
+                    doc_for_md,
+                    output_dir,
+                    filename,
+                    reference_doc=reference_doc,
+                )
             finally:
                 doc_for_md.close()
+                reference_doc.close()
             artifacts["markdown"] = str(md_path)
 
         if emit_markdown:
