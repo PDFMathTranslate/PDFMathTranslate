@@ -11,7 +11,5 @@ This project is distributed under the terms of the GNU Affero General Public Lic
 
 When redistributing binaries (e.g., Docker images or packaged executables):
 
-1. Include the AGPLv3 text (already present in `LICENSE`) and the notices above.
-2. Provide source access as required by AGPLv3 when hosting network services based on this project.
-
-For upstream project licensing matters, consult the original PDFMathTranslate repository and include its attribution when reusing branding or assets.
+1. Include the AGPLv3 text (already present in `LICENSE`).
+2. Make the corresponding source code available as required by AGPLv3.
