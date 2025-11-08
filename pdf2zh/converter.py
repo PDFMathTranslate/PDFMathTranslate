@@ -239,7 +239,7 @@ class TranslateConverter(PDFConverterEx):
         VERTICAL_X_THRESHOLD = 2.0
 
         def flush_vertical_chars():
-            nonlocal vertical_chars
+            nonlocal vertical_chars, xt, xt_cls
             if not vertical_chars:
                 return
             layout_chars = sorted(vertical_chars, key=lambda ch: (-ch.y0, ch.x0))
@@ -286,6 +286,8 @@ class TranslateConverter(PDFConverterEx):
                         vertical_spacing=spacing,
                     )
                 )
+                xt = None
+                xt_cls = -1
             vertical_chars = []
 
         def is_vertical_glyph(char: LTChar) -> bool:
