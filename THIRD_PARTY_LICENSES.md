@@ -7,7 +7,7 @@ This project is distributed under the terms of the GNU Affero General Public Lic
 | **PyMuPDF** (`pymupdf` ≥ 1.26.6) | AGPLv3 | Source: [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF). |
 | **pymupdf4llm** ≥ 0.1.8 | AGPLv3 | Source: [pymupdf/pymupdf4llm](https://github.com/pymupdf/pymupdf4llm). Ships with `pymupdf4llm-<version>.dist-info/licenses/LICENSE`. |
 | **tabulate** | MIT License | SPDX: MIT. See [pypi.org/project/tabulate](https://pypi.org/project/tabulate/) for the full text. |
-| **PDFMathTranslate (upstream fork)** | AGPLv3 | Original project at [Byaidu/PDFMathTranslate](https://github.com/Byaidu/PDFMathTranslate) distributes under AGPLv3; this fork inherits the same terms and must retain upstream copyright notices. |
+| **PDFMathTranslate (upstream)** | AGPLv3 | Source: [Byaidu/PDFMathTranslate](https://github.com/Byaidu/PDFMathTranslate). |
 
 When redistributing binaries (e.g., Docker images or packaged executables):
 
