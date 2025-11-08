@@ -10,6 +10,7 @@ import re
 
 import pymupdf
 import pymupdf4llm
+from pymupdf4llm.helpers.pymupdf_rag import IdentifyHeaders
 
 
 PREFIX_CHARS = set("#>+-0123456789. \t")
@@ -58,9 +59,12 @@ def export_markdown(
 
     safe_pdf_name = f"{base_name.replace(' ', '-')}.pdf"
 
+    translated_header_detector = CleanHeaderDetector(doc, pages=pages)
+
     markdown_text = pymupdf4llm.to_markdown(
         doc,
         filename=safe_pdf_name,
+        hdr_info=translated_header_detector,
         write_images=write_images,
         embed_images=embed_images,
         image_path=str(image_path),
@@ -74,9 +78,11 @@ def export_markdown(
             reference_assets_dir = Path(tempfile.mkdtemp(prefix="pdf2zh-mdref-"))
             reference_image_path = reference_assets_dir
 
+        reference_header_detector = CleanHeaderDetector(reference_doc, pages=pages)
         reference_markdown = pymupdf4llm.to_markdown(
             reference_doc,
             filename=safe_pdf_name,
+            hdr_info=reference_header_detector,
             write_images=write_images,
             embed_images=embed_images,
             image_path=str(reference_image_path),
@@ -94,6 +100,8 @@ def export_markdown(
             assets_rel.as_posix(),
         )
         markdown_text = _rewrite_image_paths(markdown_text, assets_rel)
+
+    markdown_text = _promote_primary_heading(markdown_text)
 
     md_path = output_dir / f"{base_name}.md"
     md_path.write_text(markdown_text, encoding="utf-8")
@@ -242,3 +250,70 @@ def _rewrite_image_paths(markdown_text: str, assets_rel: Path | None) -> str:
         return f"![]({rel_prefix}/{basename})"
 
     return re.sub(r"!\[]\(([^)]+)\)", replace, markdown_text)
+
+
+def _promote_primary_heading(markdown_text: str) -> str:
+    lines = markdown_text.splitlines()
+    for idx, line in enumerate(lines):
+        stripped = line.lstrip()
+        if stripped.startswith("## "):
+            leading = len(line) - len(stripped)
+            lines[idx] = (" " * leading) + "#" + stripped[2:]
+            break
+    return "\n".join(lines)
+
+
+class CleanHeaderDetector:
+    def __init__(self, doc: pymupdf.Document, pages: Optional[list[int]] = None):
+        self._doc = doc
+        self._pages = pages
+        self._delegate = IdentifyHeaders(doc, pages=pages)
+        self._prune_placeholder_sizes()
+
+    def _prune_placeholder_sizes(self):
+        removable = []
+        for size in sorted(self._delegate.header_id.keys(), reverse=True):
+            if self._size_is_placeholder_only(size):
+                removable.append(size)
+        for size in removable:
+            self._delegate.header_id.pop(size, None)
+        if self._delegate.header_id:
+            sizes = sorted(self._delegate.header_id.keys(), reverse=True)
+            self._delegate.header_id = {
+                size: "#" * i + " " for i, size in enumerate(sizes, start=1)
+            }
+            self._delegate.body_limit = min(sizes) - 1
+
+    def _size_is_placeholder_only(self, target_size: float) -> bool:
+        doc = self._doc
+        owns_doc = False
+        if not isinstance(doc, pymupdf.Document):
+            doc = pymupdf.open(doc)
+            owns_doc = True
+        try:
+            pages = self._pages or range(doc.page_count)
+            for pno in pages:
+                page = doc.load_page(pno)
+                blocks = page.get_text("dict", flags=pymupdf.TEXTFLAGS_TEXT)["blocks"]
+                for line in [
+                    s
+                    for b in blocks
+                    for l in b["lines"]
+                    for s in l["spans"]
+                    if round(s["size"]) == target_size
+                ]:
+                    text = (line.get("text") or "").strip()
+                    normalized = text.lstrip("* ").strip().lower()
+                    if not (
+                        normalized.startswith("==>")
+                        or normalized.startswith("figure ")
+                        or normalized.startswith("arxiv:")
+                    ):
+                        return False
+            return True
+        finally:
+            if owns_doc:
+                doc.close()
+
+    def get_header_id(self, span: dict, page=None) -> str:
+        return self._delegate.get_header_id(span, page=page)

@@ -39,7 +39,7 @@ def test_export_markdown(tmp_path, monkeypatch):
 
     assert md_path.exists()
     content = md_path.read_text(encoding="utf-8")
-    assert "## Überschrift" in content
+    assert "# Überschrift" in content
 
     assets_dir = tmp_path / "plain text_assets"
     assert assets_dir.exists()
