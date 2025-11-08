@@ -18,7 +18,7 @@ def test_export_markdown(tmp_path, monkeypatch):
         image_rel = f"{image_path.as_posix()}/{filename}-0000-00.png"
         (image_path / f"{filename}-0000-00.png").write_text("fake")
         if call_state["count"] == 1:
-            return f"## Heading\n![]({image_rel})\nplain line\n"
+            return f"## Überschrift\n![]({image_rel})\ntranslated line\n"
         return f"## **Heading**\n![]({image_rel})\nplain line\n"
 
     monkeypatch.setattr("pdf2zh.markdown.pymupdf4llm.to_markdown", fake_to_markdown)
@@ -39,7 +39,7 @@ def test_export_markdown(tmp_path, monkeypatch):
 
     assert md_path.exists()
     content = md_path.read_text(encoding="utf-8")
-    assert "## **Heading**" in content
+    assert "## **Überschrift**" in content
 
     assets_dir = tmp_path / "plain text_assets"
     assert assets_dir.exists()
