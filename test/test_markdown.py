@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pymupdf
 
-from pdf2zh.markdown import export_markdown
+from pdf2zh.markdown import export_markdown, _FootnoteEntry
 
 
 def test_export_markdown(tmp_path, monkeypatch):
@@ -10,18 +10,27 @@ def test_export_markdown(tmp_path, monkeypatch):
 
     call_state = {"count": 0}
 
-    def fake_to_markdown(doc, **kwargs):
+    def fake_render(doc, **kwargs):
         call_state["count"] += 1
-        image_path = Path(kwargs["image_path"])
-        image_path.mkdir(parents=True, exist_ok=True)
-        filename = Path(kwargs["filename"]).name
-        image_rel = f"{image_path.as_posix()}/{filename}-0000-00.png"
-        (image_path / f"{filename}-0000-00.png").write_text("fake")
+        image_path = kwargs.get("image_path") or ""
+        write_images = kwargs.get("write_images", False)
+        filename = Path(kwargs.get("filename", "doc.pdf")).name
+        image_rel = f"{image_path}/{filename}-0000-00.png" if image_path else "inline.png"
+        if write_images and image_path:
+            image_dir = Path(image_path)
+            image_dir.mkdir(parents=True, exist_ok=True)
+            (image_dir / f"{filename}-0000-00.png").write_text("fake")
         if call_state["count"] == 1:
-            return f"## Überschrift\n![]({image_rel})\ntranslated line\n"
-        return f"## **Heading**\n![]({image_rel})\nplain line\n"
+            footnotes = []
+            if kwargs.get("collect_footnotes"):
+                footnotes = [_FootnoteEntry(page_number=1, kind="footnote", markdown="> note\n\n")]
+            return f"## Überschrift\n![]({image_rel})\ntranslated line\n", footnotes
+        return f"## **Heading**\n![]({image_rel})\nplain line\n", []
 
-    monkeypatch.setattr("pdf2zh.markdown.pymupdf4llm.to_markdown", fake_to_markdown)
+    monkeypatch.setattr(
+        "pdf2zh.markdown._render_markdown_document",
+        fake_render,
+    )
 
     doc = pymupdf.open(source_pdf)
     reference = pymupdf.open(source_pdf)
@@ -46,3 +55,5 @@ def test_export_markdown(tmp_path, monkeypatch):
     files = list(assets_dir.iterdir())
     assert files, "Expected fake image to be written"
     assert "plain text_assets/plain-text.pdf-0000-00.png" in content
+    assert "### Footnotes" in content
+    assert "note" in content

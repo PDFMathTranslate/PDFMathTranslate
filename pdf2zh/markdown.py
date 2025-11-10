@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -9,6 +10,8 @@ import re
 
 import pymupdf
 import pymupdf4llm
+from pymupdf4llm import parse_document
+from pymupdf4llm.helpers import document_layout as doc_layout
 
 PREFIX_CHARS = set("#>+-0123456789. \t")
 WRAPPER_TOKENS = ("**", "__", "~~", "`", "_")
@@ -17,6 +20,107 @@ PLACEHOLDER_PATTERNS = (
     re.compile(r"^\*\*figure", re.IGNORECASE),
     re.compile(r"^\*\*table", re.IGNORECASE),
 )
+
+
+FOOTNOTE_INLINE = "inline"
+FOOTNOTE_APPEND = "append"
+FOOTNOTE_DROP = "drop"
+FOOTNOTE_MODES = {FOOTNOTE_INLINE, FOOTNOTE_APPEND, FOOTNOTE_DROP}
+
+
+@dataclass
+class _FootnoteEntry:
+    page_number: int
+    kind: str
+    markdown: str
+
+
+def _render_markdown_document(
+    doc: pymupdf.Document,
+    *,
+    filename: str,
+    image_path: str,
+    pages: Optional[list[int]],
+    write_images: bool,
+    embed_images: bool,
+    footnote_mode: str,
+    collect_footnotes: bool,
+):
+    if footnote_mode not in FOOTNOTE_MODES:
+        raise ValueError(
+            f"Invalid markdown footnote mode '{footnote_mode}'."
+        )
+    parsed_doc = parse_document(
+        doc,
+        filename=filename,
+        image_path=image_path,
+        pages=pages,
+    )
+    collected: list[_FootnoteEntry] = []
+    if footnote_mode != FOOTNOTE_INLINE:
+        collected = _extract_structural_footnotes(
+            parsed_doc,
+            footnote_mode,
+            collect_footnotes,
+        )
+    markdown_text = parsed_doc.to_markdown(
+        header=True,
+        footer=(footnote_mode == FOOTNOTE_INLINE),
+        write_images=write_images,
+        embed_images=embed_images,
+    )
+    return markdown_text, collected
+
+
+def _extract_structural_footnotes(
+    parsed_doc,
+    mode: str,
+    capture: bool,
+) -> list[_FootnoteEntry]:
+    collected: list[_FootnoteEntry] = []
+    pages = getattr(parsed_doc, "pages", []) or []
+    for page in pages:
+        boxes = list(getattr(page, "boxes", []) or [])
+        filtered: list = []
+        for box in boxes:
+            kind = getattr(box, "boxclass", "")
+            if kind in {"footnote", "page-footer"}:
+                if capture and mode == FOOTNOTE_APPEND:
+                    markdown = _box_to_markdown(kind, box)
+                    if markdown.strip():
+                        collected.append(
+                            _FootnoteEntry(
+                                page_number=getattr(page, "page_number", 0),
+                                kind=kind,
+                                markdown=markdown.strip(),
+                            )
+                        )
+                continue
+            filtered.append(box)
+        page.boxes = filtered
+    return collected
+
+
+def _box_to_markdown(kind: str, box) -> str:
+    textlines = getattr(box, "textlines", None)
+    if not textlines:
+        return ""
+    if kind == "footnote":
+        return doc_layout.footnote_to_md(textlines)
+    return doc_layout.text_to_md(textlines)
+
+
+def _format_footnote_section(entries: list[_FootnoteEntry]) -> str:
+    if not entries:
+        return ""
+    lines = ["### Footnotes", ""]
+    for entry in entries:
+        kind_label = entry.kind.replace("-", " ").title()
+        lines.append(f"**Page {entry.page_number} · {kind_label}**")
+        lines.append("")
+        lines.append(entry.markdown.strip())
+        lines.append("")
+    return "\n".join(lines).strip() + "\n"
 
 
 def export_markdown(
@@ -28,6 +132,7 @@ def export_markdown(
     write_images: bool = True,
     embed_images: bool = False,
     pages: Optional[list[int]] = None,
+    markdown_footnotes: str = FOOTNOTE_APPEND,
 ) -> Path:
     """
     Render the provided PyMuPDF document into Markdown via pymupdf4llm.
@@ -39,13 +144,13 @@ def export_markdown(
         write_images: Whether to dump extracted images to disk.
         embed_images: Whether to embed images via data URIs instead of files.
         pages: Optional list of 0-based page indices to include.
+        markdown_footnotes: Controls footnote placement: "inline", "append", or "drop".
     """
 
     if write_images and embed_images:
         raise ValueError("write_images and embed_images cannot both be True")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    image_path = output_dir
     assets_rel: Optional[Path] = None
     image_dir_token: Optional[str] = None
 
@@ -55,31 +160,36 @@ def export_markdown(
         output_dir_abs = output_dir.resolve()
         assets_rel = Path(os.path.relpath(assets_dir.resolve(), output_dir_abs))
         image_dir_token = assets_dir.as_posix()
-        image_path = assets_dir
 
     safe_pdf_name = f"{base_name.replace(' ', '-')}.pdf"
 
-    markdown_text = pymupdf4llm.to_markdown(
+    translated_markdown, collected = _render_markdown_document(
         doc,
         filename=safe_pdf_name,
+        image_path=image_dir_token or "",
+        pages=pages,
         write_images=write_images,
         embed_images=embed_images,
-        image_path=str(image_path),
-        pages=pages,
+        footnote_mode=markdown_footnotes,
+        collect_footnotes=True,
     )
 
     if reference_doc is not None:
         # Reference Markdown is used purely for styling cues, so image extraction is unnecessary.
-        reference_markdown = pymupdf4llm.to_markdown(
+        reference_markdown, _ = _render_markdown_document(
             reference_doc,
             filename=safe_pdf_name,
-            write_images=False,
-            embed_images=False,
             image_path="",
             pages=pages,
+            write_images=False,
+            embed_images=False,
+            footnote_mode=markdown_footnotes,
+            collect_footnotes=False,
         )
 
-        markdown_text = _merge_markdown(reference_markdown, markdown_text)
+        markdown_text = _merge_markdown(reference_markdown, translated_markdown)
+    else:
+        markdown_text = translated_markdown
 
     if write_images and assets_rel and image_dir_token:
         markdown_text = markdown_text.replace(
@@ -89,6 +199,9 @@ def export_markdown(
         markdown_text = _rewrite_image_paths(markdown_text, assets_rel)
 
     markdown_text = _promote_primary_heading(markdown_text)
+
+    if markdown_footnotes == FOOTNOTE_APPEND and collected:
+        markdown_text = markdown_text.rstrip() + "\n\n" + _format_footnote_section(collected)
 
     md_path = output_dir / f"{base_name}.md"
     md_path.write_text(markdown_text, encoding="utf-8")

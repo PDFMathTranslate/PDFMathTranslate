@@ -265,6 +265,7 @@ In the following table, we list all advanced options for reference:
 | `-t`                  | [Multi-threads](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#threads)                | `pdf2zh example.pdf -t 1`                      |
 | `-o`                  | Output dir                                                                                                    | `pdf2zh example.pdf -o output`                 |
 | `--output-format`     | Choose translated artifact: pdf / md / both                                                                   | `pdf2zh example.pdf --output-format both`      |
+| `--markdown-footnotes`| Control Markdown footnotes placement: inline / append / drop                                                 | `pdf2zh example.pdf --output-format md --markdown-footnotes append` |
 | `--no-translate`      | Skip translation and reuse source text (layout debugging)                                                     | `pdf2zh example.pdf --no-translate`            |
 | `-f`, `-c`            | [Exceptions](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#exceptions)                | `pdf2zh example.pdf -f "(MS.*)"`               |
 | `-cp`                 | Compatibility Mode                                                                                            | `pdf2zh example.pdf --compatible`              |
