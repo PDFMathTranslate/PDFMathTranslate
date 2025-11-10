@@ -5,8 +5,11 @@ import pymupdf
 from pdf2zh.markdown import export_markdown, _FootnoteEntry
 
 
-def test_export_markdown(tmp_path, monkeypatch):
-    source_pdf = Path("test/file/translate.cli.plain.text.pdf")
+SOURCE_PDF = Path("test/file/translate.cli.plain.text.pdf")
+
+
+def test_export_markdown_append_mode(tmp_path, monkeypatch):
+    source_pdf = SOURCE_PDF
 
     call_state = {"count": 0}
 
@@ -57,3 +60,73 @@ def test_export_markdown(tmp_path, monkeypatch):
     assert "plain text_assets/plain-text.pdf-0000-00.png" in content
     assert "### Footnotes" in content
     assert "note" in content
+
+
+def test_export_markdown_drop_mode(tmp_path, monkeypatch):
+    source_pdf = SOURCE_PDF
+
+    def fake_render(doc, **kwargs):
+        return (
+            "## Heading\ntranslated line\n",
+            [
+                _FootnoteEntry(
+                    page_number=2,
+                    kind="page-footer",
+                    markdown="Permission to make digital copies",
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "pdf2zh.markdown._render_markdown_document",
+        fake_render,
+    )
+
+    doc = pymupdf.open(source_pdf)
+    try:
+        md_path = export_markdown(
+            doc,
+            tmp_path,
+            "drop-mode",
+            markdown_footnotes="drop",
+            write_images=False,
+        )
+    finally:
+        doc.close()
+
+    content = md_path.read_text(encoding="utf-8")
+    assert "### Footnotes" not in content
+    assert "Permission to make digital copies" not in content
+
+
+def test_export_markdown_inline_mode(tmp_path, monkeypatch):
+    source_pdf = SOURCE_PDF
+
+    inline_marker = "Permission to make digital or hard copies"
+
+    def fake_render(doc, **kwargs):
+        return (
+            f"## Heading\n{inline_marker}\ntranslated line\n",
+            [],
+        )
+
+    monkeypatch.setattr(
+        "pdf2zh.markdown._render_markdown_document",
+        fake_render,
+    )
+
+    doc = pymupdf.open(source_pdf)
+    try:
+        md_path = export_markdown(
+            doc,
+            tmp_path,
+            "inline-mode",
+            markdown_footnotes="inline",
+            write_images=False,
+        )
+    finally:
+        doc.close()
+
+    content = md_path.read_text(encoding="utf-8")
+    assert inline_marker in content
+    assert "### Footnotes" not in content

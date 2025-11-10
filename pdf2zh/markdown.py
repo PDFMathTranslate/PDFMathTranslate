@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -9,7 +8,6 @@ import os
 import re
 
 import pymupdf
-import pymupdf4llm
 from pymupdf4llm import parse_document
 from pymupdf4llm.helpers import document_layout as doc_layout
 
