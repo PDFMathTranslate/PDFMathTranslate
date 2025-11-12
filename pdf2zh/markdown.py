@@ -28,22 +28,14 @@ FOOTNOTE_MODES = {
     FOOTNOTE_MOVE_TO_END,
     FOOTNOTE_REMOVE,
 }
-FOOTNOTE_LEGACY_ALIASES = {
-    "inline": FOOTNOTE_KEEP_INLINE,
-    "append": FOOTNOTE_MOVE_TO_END,
-    "drop": FOOTNOTE_REMOVE,
-}
-
-
 def _normalize_footnote_mode(value: Optional[str]) -> str:
     """Map user-provided footnote flag to canonical token."""
     if value is None:
         return FOOTNOTE_MOVE_TO_END
     token = str(value).strip().lower()
-    canonical = FOOTNOTE_LEGACY_ALIASES.get(token, token)
-    if canonical not in FOOTNOTE_MODES:
+    if token not in FOOTNOTE_MODES:
         raise ValueError(f"Invalid markdown footnote mode '{value}'.")
-    return canonical
+    return token
 
 
 @dataclass

@@ -203,8 +203,6 @@ pdf2zh document.pdf --output-format md --markdown-footnotes move-to-end
 - `keep-inline`: 元の位置に残す（ABSTRACTが途中で途切れる可能性あり）
 - `remove`: 脚注を完全に削除
 
-> 旧キーワード `inline` / `append` / `drop` も当面は互換目的で受け付けますが、将来的に削除予定です。
-
 ACM/IEEE形式の論文などでは `move-to-end` もしくは `remove` を使うことで、各ページの許諾文が本文に割り込まず読みやすくなります。
 
 <h3 id="partial">全文または部分的なドキュメント翻訳</h3>

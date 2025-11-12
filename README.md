@@ -299,8 +299,6 @@ Options:
 - `keep-inline`: Keep them at the original positions (may split ABSTRACT text).
 - `remove`: Remove them completely.
 
-> Legacy values `inline`, `append`, and `drop` are still accepted for backward compatibility but will be removed in a future release.
-
 Academic papers (ACM/IEEE etc.) usually look cleaner with `move-to-end` or `remove`, because the permission notice on every page no longer breaks the narrative flow.
 
 #### Self-hosted NVIDIA Riva (beta)

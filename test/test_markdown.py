@@ -62,43 +62,6 @@ def test_export_markdown_append_mode(tmp_path, monkeypatch):
     assert "note" in content
 
 
-def test_export_markdown_legacy_alias_append(tmp_path, monkeypatch):
-    source_pdf = SOURCE_PDF
-
-    def fake_render(doc, **kwargs):
-        return (
-            "## Heading\ntranslated line\n",
-            [
-                _FootnoteEntry(
-                    page_number=1,
-                    kind="footnote",
-                    markdown="legacy note",
-                )
-            ],
-        )
-
-    monkeypatch.setattr(
-        "pdf2zh.markdown._render_markdown_document",
-        fake_render,
-    )
-
-    doc = pymupdf.open(source_pdf)
-    try:
-        md_path = export_markdown(
-            doc,
-            tmp_path,
-            "legacy-alias",
-            markdown_footnotes="append",
-            write_images=False,
-        )
-    finally:
-        doc.close()
-
-    content = md_path.read_text(encoding="utf-8")
-    assert "legacy note" in content
-    assert "### Footnotes" in content
-
-
 def test_export_markdown_remove_mode(tmp_path, monkeypatch):
     source_pdf = SOURCE_PDF
 
