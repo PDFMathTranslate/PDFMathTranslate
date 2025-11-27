@@ -5,6 +5,7 @@ from pdf2zh import translate_stream
 import tqdm
 import json
 import io
+from string import Template
 from pdf2zh.doclayout import ModelInstance
 from pdf2zh.config import ConfigManager
 
@@ -44,6 +45,9 @@ def translate_task(
     def progress_bar(t: tqdm.tqdm):
         self.update_state(state="PROGRESS", meta={"n": t.n, "total": t.total})  # noqa
         print(f"Translating {t.n} / {t.total} pages")
+
+    if "prompt" in args:
+        args["prompt"] = Template(args["prompt"])
 
     doc_mono, doc_dual = translate_stream(
         stream,
