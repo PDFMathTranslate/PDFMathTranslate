@@ -998,8 +998,8 @@ class OpenAIlikedTranslator(OpenAITranslator):
             base_url=base_url,
             api_key=api_key,
             ignore_cache=ignore_cache,
+            prompt=prompt,
         )
-        self.prompttext = prompt
 
 
 class QwenMtTranslator(OpenAITranslator):
