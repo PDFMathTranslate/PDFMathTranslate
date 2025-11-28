@@ -180,7 +180,7 @@ Python環境を事前にインストールする必要はありません
 | `-t`  | [マルチスレッド](#threads) | `pdf2zh example.pdf -t 1` |
 | `-o`  | 出力ディレクトリ | `pdf2zh example.pdf -o output` |
 | `--output-format` | 生成するフォーマット（pdf / md / both） | `pdf2zh example.pdf --output-format both` |
-| `--markdown-footnotes` | Markdown脚注/フッターの扱い（keep-inline / move-to-end / remove） | `pdf2zh example.pdf --output-format md --markdown-footnotes move-to-end` |
+| `--markdown-footnotes` | Markdown脚注/フッターの扱い（move-to-end / remove） | `pdf2zh example.pdf --output-format md --markdown-footnotes move-to-end` |
 | `-f`, `-c` | [例外](#exceptions) | `pdf2zh example.pdf -f "(MS.*)"` |
 | `--share` | [gradio公開リンクを取得] | `pdf2zh -i --share` |
 | `--authorized` | [[ウェブ認証とカスタム認証ページの追加](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.)] | `pdf2zh -i --authorized users.txt [auth.html]` |
@@ -200,10 +200,9 @@ pdf2zh document.pdf --output-format md --markdown-footnotes move-to-end
 ```
 
 - `move-to-end`（デフォルト）: 脚注/フッターを末尾の `### Footnotes` セクションにまとめる
-- `keep-inline`: 元の位置に残す（ABSTRACTが途中で途切れる可能性あり）
 - `remove`: 脚注を完全に削除
 
-ACM/IEEE形式の論文などでは `move-to-end` もしくは `remove` を使うことで、各ページの許諾文が本文に割り込まず読みやすくなります。
+ACM/IEEE形式の論文などでは、これらのオプションにより各ページの許諾文が本文に割り込まず読みやすくなります。
 
 <h3 id="partial">全文または部分的なドキュメント翻訳</h3>
 

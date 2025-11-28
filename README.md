@@ -265,7 +265,7 @@ In the following table, we list all advanced options for reference:
 | `-t`                  | [Multi-threads](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#threads)                | `pdf2zh example.pdf -t 1`                      |
 | `-o`                  | Output dir                                                                                                    | `pdf2zh example.pdf -o output`                 |
 | `--output-format`     | Choose translated artifact: pdf / md / both                                                                   | `pdf2zh example.pdf --output-format both`      |
-| `--markdown-footnotes`| Control Markdown footnotes placement: keep-inline / move-to-end / remove                                      | `pdf2zh example.pdf --output-format md --markdown-footnotes move-to-end` |
+| `--markdown-footnotes`| Control Markdown footnotes placement: move-to-end / remove                                                    | `pdf2zh example.pdf --output-format md --markdown-footnotes move-to-end` |
 | `--no-translate`      | Skip translation and reuse source text (layout debugging)                                                     | `pdf2zh example.pdf --no-translate`            |
 | `-f`, `-c`            | [Exceptions](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#exceptions)                | `pdf2zh example.pdf -f "(MS.*)"`               |
 | `-cp`                 | Compatibility Mode                                                                                            | `pdf2zh example.pdf --compatible`              |
@@ -296,10 +296,9 @@ pdf2zh document.pdf --output-format md --markdown-footnotes move-to-end
 Options:
 
 - `move-to-end` (default): Move footnotes/page footers to a `### Footnotes` section at the end.
-- `keep-inline`: Keep them at the original positions (may split ABSTRACT text).
 - `remove`: Remove them completely.
 
-Academic papers (ACM/IEEE etc.) usually look cleaner with `move-to-end` or `remove`, because the permission notice on every page no longer breaks the narrative flow.
+Academic papers (ACM/IEEE etc.) usually look cleaner with these options because the permission notice on every page no longer breaks the narrative flow.
 
 #### Self-hosted NVIDIA Riva (beta)
 

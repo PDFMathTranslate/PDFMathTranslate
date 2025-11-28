@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -11,6 +12,8 @@ import pymupdf
 from pymupdf4llm import parse_document
 from pymupdf4llm.helpers import document_layout as doc_layout
 
+log = logging.getLogger(__name__)
+
 PREFIX_CHARS = set("#>+-0123456789. \t")
 WRAPPER_TOKENS = ("**", "__", "~~", "`", "_")
 PLACEHOLDER_PATTERNS = (
@@ -20,11 +23,9 @@ PLACEHOLDER_PATTERNS = (
 )
 
 
-FOOTNOTE_KEEP_INLINE = "keep-inline"
 FOOTNOTE_MOVE_TO_END = "move-to-end"
 FOOTNOTE_REMOVE = "remove"
 FOOTNOTE_MODES = {
-    FOOTNOTE_KEEP_INLINE,
     FOOTNOTE_MOVE_TO_END,
     FOOTNOTE_REMOVE,
 }
@@ -65,16 +66,14 @@ def _render_markdown_document(
         image_path=image_path,
         pages=pages,
     )
-    collected: list[_FootnoteEntry] = []
-    if footnote_mode != FOOTNOTE_KEEP_INLINE:
-        collected = _extract_structural_footnotes(
-            parsed_doc,
-            footnote_mode,
-            collect_footnotes,
-        )
+    collected = _extract_structural_footnotes(
+        parsed_doc,
+        footnote_mode,
+        collect_footnotes,
+    )
     markdown_text = parsed_doc.to_markdown(
         header=True,
-        footer=(footnote_mode == FOOTNOTE_KEEP_INLINE),
+        footer=False,
         write_images=write_images,
         embed_images=embed_images,
     )
@@ -87,6 +86,7 @@ def _extract_structural_footnotes(
     capture: bool,
 ) -> list[_FootnoteEntry]:
     collected: list[_FootnoteEntry] = []
+    removed_count = 0
     pages = getattr(parsed_doc, "pages", []) or []
     for page in pages:
         boxes = list(getattr(page, "boxes", []) or [])
@@ -94,6 +94,7 @@ def _extract_structural_footnotes(
         for box in boxes:
             kind = getattr(box, "boxclass", "")
             if kind in {"footnote", "page-footer"}:
+                removed_count += 1
                 if capture and mode == FOOTNOTE_MOVE_TO_END:
                     markdown = _box_to_markdown(kind, box)
                     if markdown.strip():
@@ -107,6 +108,9 @@ def _extract_structural_footnotes(
                 continue
             filtered.append(box)
         page.boxes = filtered
+    if removed_count > 0:
+        action = "moved to end" if mode == FOOTNOTE_MOVE_TO_END else "removed"
+        log.info(f"Markdown footnotes: {removed_count} footnote(s) {action}")
     return collected
 
 
@@ -153,7 +157,7 @@ def export_markdown(
         write_images: Whether to dump extracted images to disk.
         embed_images: Whether to embed images via data URIs instead of files.
         pages: Optional list of 0-based page indices to include.
-        markdown_footnotes: Controls footnote placement: "keep-inline", "move-to-end", or "remove".
+        markdown_footnotes: Controls footnote placement: "move-to-end" (default) or "remove".
     """
 
     markdown_footnotes = _normalize_footnote_mode(markdown_footnotes)

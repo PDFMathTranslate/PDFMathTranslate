@@ -97,36 +97,3 @@ def test_export_markdown_remove_mode(tmp_path, monkeypatch):
     content = md_path.read_text(encoding="utf-8")
     assert "### Footnotes" not in content
     assert "Permission to make digital copies" not in content
-
-
-def test_export_markdown_keep_inline_mode(tmp_path, monkeypatch):
-    source_pdf = SOURCE_PDF
-
-    inline_marker = "Permission to make digital or hard copies"
-
-    def fake_render(doc, **kwargs):
-        return (
-            f"## Heading\n{inline_marker}\ntranslated line\n",
-            [],
-        )
-
-    monkeypatch.setattr(
-        "pdf2zh.markdown._render_markdown_document",
-        fake_render,
-    )
-
-    doc = pymupdf.open(source_pdf)
-    try:
-        md_path = export_markdown(
-            doc,
-            tmp_path,
-            "inline-mode",
-            markdown_footnotes="keep-inline",
-            write_images=False,
-        )
-    finally:
-        doc.close()
-
-    content = md_path.read_text(encoding="utf-8")
-    assert inline_marker in content
-    assert "### Footnotes" not in content
