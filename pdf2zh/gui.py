@@ -18,6 +18,7 @@ from pdf2zh import __version__
 from pdf2zh.high_level import translate
 from pdf2zh.doclayout import ModelInstance
 from pdf2zh.config import ConfigManager
+from pdf2zh.ppt_process import process_ppt_file
 from pdf2zh.translator import (
     AnythingLLMTranslator,
     AzureOpenAITranslator,
@@ -119,7 +120,7 @@ if ConfigManager.get("PDF2ZH_DEMO"):
 # Limit Enabled Services
 enabled_services: T.Optional[T.List[str]] = ConfigManager.get("ENABLED_SERVICES")
 if isinstance(enabled_services, list):
-    default_services = ["Google", "Bing"]
+    default_services = ["OpenAI", "Google", "Bing"]
     enabled_services_names = [str(_).lower().strip() for _ in enabled_services]
     enabled_services = [
         k
@@ -270,21 +271,9 @@ def translate_file(
         )
 
     filename = os.path.splitext(os.path.basename(file_path))[0]
-    file_raw = output / f"{filename}.pdf"
-    file_mono = output / f"{filename}-mono.pdf"
-    file_dual = output / f"{filename}-dual.pdf"
+    file_ext = os.path.splitext(file_path)[1].lower()
 
     translator = service_map[service]
-    if page_range != "Others":
-        selected_page = page_map[page_range]
-    else:
-        selected_page = []
-        for p in page_input.split(","):
-            if "-" in p:
-                start, end = p.split("-")
-                selected_page.extend(range(int(start) - 1, int(end)))
-            else:
-                selected_page.append(int(p) - 1)
     lang_from = lang_map[lang_from]
     lang_to = lang_map[lang_to]
 
@@ -301,57 +290,96 @@ def translate_file(
 
     print(f"Files before translation: {os.listdir(output)}")
 
-    def progress_bar(t: tqdm.tqdm):
-        desc = getattr(t, "desc", "Translating...")
-        if desc == "":
-            desc = "Translating..."
-        progress(t.n / t.total, desc=desc)
+    # Check if it's a PowerPoint file
+    if file_ext in [".pptx", ".ppt"]:
+        # Process PPT file
+        progress(0.1, desc="Initializing PPT translation...")
+        
+        # Create translator instance
+        translator_instance = translator(lang_from, lang_to, "", ignore_cache=ignore_cache)
+        translator_instance.set_envs(_envs)
+        
+        # Translate PPT
+        translated_path = process_ppt_file(file_path, translator_instance, str(output))
+        
+        progress(1.0, desc="Translation complete!")
+        
+        return (
+            translated_path,
+            gr.update(visible=False),  # PPT preview not supported in Gradio PDF component
+            translated_path,
+            gr.update(visible=True),
+            gr.update(visible=True),
+            gr.update(visible=True),
+        )
+    else:
+        # Process PDF file
+        file_raw = output / f"{filename}.pdf"
+        file_mono = output / f"{filename}-mono.pdf"
+        file_dual = output / f"{filename}-dual.pdf"
 
-    try:
-        threads = int(threads)
-    except ValueError:
-        threads = 1
+        if page_range != "Others":
+            selected_page = page_map[page_range]
+        else:
+            selected_page = []
+            for p in page_input.split(","):
+                if "-" in p:
+                    start, end = p.split("-")
+                    selected_page.extend(range(int(start) - 1, int(end)))
+                else:
+                    selected_page.append(int(p) - 1)
 
-    param = {
-        "files": [str(file_raw)],
-        "pages": selected_page,
-        "lang_in": lang_from,
-        "lang_out": lang_to,
-        "service": f"{translator.name}",
-        "output": output,
-        "thread": int(threads),
-        "callback": progress_bar,
-        "cancellation_event": cancellation_event_map[session_id],
-        "envs": _envs,
-        "prompt": Template(prompt) if prompt else None,
-        "skip_subset_fonts": skip_subset_fonts,
-        "ignore_cache": ignore_cache,
-        "vfont": vfont,  # 添加自定义公式字体正则表达式
-        "model": ModelInstance.value,
-    }
+        def progress_bar(t: tqdm.tqdm):
+            desc = getattr(t, "desc", "Translating...")
+            if desc == "":
+                desc = "Translating..."
+            progress(t.n / t.total, desc=desc)
 
-    try:
-        if use_babeldoc:
-            return babeldoc_translate_file(**param)
-        translate(**param)
-    except CancelledError:
-        del cancellation_event_map[session_id]
-        raise gr.Error("Translation cancelled")
-    print(f"Files after translation: {os.listdir(output)}")
+        try:
+            threads = int(threads)
+        except ValueError:
+            threads = 1
 
-    if not file_mono.exists() or not file_dual.exists():
-        raise gr.Error("No output")
+        param = {
+            "files": [str(file_raw)],
+            "pages": selected_page,
+            "lang_in": lang_from,
+            "lang_out": lang_to,
+            "service": f"{translator.name}",
+            "output": output,
+            "thread": int(threads),
+            "callback": progress_bar,
+            "cancellation_event": cancellation_event_map[session_id],
+            "envs": _envs,
+            "prompt": Template(prompt) if prompt else None,
+            "skip_subset_fonts": skip_subset_fonts,
+            "ignore_cache": ignore_cache,
+            "vfont": vfont,  # 添加自定义公式字体正则表达式
+            "model": ModelInstance.value,
+        }
 
-    progress(1.0, desc="Translation complete!")
+        try:
+            if use_babeldoc:
+                return babeldoc_translate_file(**param)
+            translate(**param)
+        except CancelledError:
+            del cancellation_event_map[session_id]
+            raise gr.Error("Translation cancelled")
+        print(f"Files after translation: {os.listdir(output)}")
 
-    return (
-        str(file_mono),
-        str(file_mono),
-        str(file_dual),
-        gr.update(visible=True),
-        gr.update(visible=True),
-        gr.update(visible=True),
-    )
+        if not file_mono.exists() or not file_dual.exists():
+            raise gr.Error("No output")
+
+        progress(1.0, desc="Translation complete!")
+
+        return (
+            str(file_mono),
+            str(file_mono),
+            str(file_dual),
+            gr.update(visible=True),
+            gr.update(visible=True),
+            gr.update(visible=True),
+        )
 
 
 def babeldoc_translate_file(**kwargs):
@@ -546,7 +574,7 @@ with gr.Blocks(
             file_input = gr.File(
                 label="File",
                 file_count="single",
-                file_types=[".pdf"],
+                file_types=[".pdf", ".pptx", ".ppt"],
                 type="filepath",
                 elem_classes=["input-file"],
             )
@@ -821,7 +849,7 @@ def setup_gui(
         if len(user_list) == 0:
             try:
                 demo.launch(
-                    server_name="0.0.0.0",
+                    server_name="127.0.0.1",
                     debug=True,
                     inbrowser=True,
                     share=share,
