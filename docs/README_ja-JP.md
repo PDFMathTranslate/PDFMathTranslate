@@ -179,6 +179,8 @@ Python環境を事前にインストールする必要はありません
 | `-s`  | [翻訳サービス](#services) |  `pdf2zh example.pdf -s deepl` |
 | `-t`  | [マルチスレッド](#threads) | `pdf2zh example.pdf -t 1` |
 | `-o`  | 出力ディレクトリ | `pdf2zh example.pdf -o output` |
+| `--output-format` | 生成するフォーマット（pdf / md / both） | `pdf2zh example.pdf --output-format both` |
+| `--markdown-footnotes` | Markdown脚注/フッターの扱い（keep / drop） | `pdf2zh example.pdf --output-format md --markdown-footnotes keep` |
 | `-f`, `-c` | [例外](#exceptions) | `pdf2zh example.pdf -f "(MS.*)"` |
 | `--share` | [gradio公開リンクを取得] | `pdf2zh -i --share` |
 | `--authorized` | [[ウェブ認証とカスタム認証ページの追加](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.)] | `pdf2zh -i --authorized users.txt [auth.html]` |
@@ -188,6 +190,19 @@ Python環境を事前にインストールする必要はありません
 | `--dir` | [batch translate] | `pdf2zh --dir /path/to/translate/` |
 | `--config` | [configuration file](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#cofig) | `pdf2zh --config /path/to/config/config.json` |
 | `--serverport` | [custom gradio server port] | `pdf2zh --serverport 7860` |
+
+#### Markdown脚注の制御
+
+PDFをMarkdownに変換する際、ページ下部の脚注や著作権表記が本文を分断することがあります。以下のオプションで配置方法を制御できます。
+
+```bash
+pdf2zh document.pdf --output-format md --markdown-footnotes keep
+```
+
+- `keep`（デフォルト）: 脚注を保持し、末尾の `### Footnotes` セクションにまとめる
+- `drop`: 脚注を完全に破棄
+
+ACM/IEEE形式の論文などでは、これらのオプションにより各ページの許諾文が本文に割り込まず読みやすくなります。
 
 <h3 id="partial">全文または部分的なドキュメント翻訳</h3>
 
