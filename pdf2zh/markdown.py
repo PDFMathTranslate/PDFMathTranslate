@@ -28,6 +28,8 @@ FOOTNOTE_MODES = {
     FOOTNOTE_MOVE_TO_END,
     FOOTNOTE_REMOVE,
 }
+
+
 def _normalize_footnote_mode(value: Optional[str]) -> str:
     """Map user-provided footnote flag to canonical token."""
     if value is None:
@@ -68,8 +70,8 @@ def _render_markdown_document(
         collected = _extract_structural_footnotes(
             parsed_doc,
             footnote_mode,
-        collect_footnotes,
-    )
+            collect_footnotes,
+        )
     markdown_text = parsed_doc.to_markdown(
         header=True,
         footer=(footnote_mode == FOOTNOTE_KEEP_INLINE),
