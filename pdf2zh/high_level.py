@@ -27,7 +27,7 @@ from pdf2zh.doclayout import OnnxModel
 from pdf2zh.pdfinterp import PDFPageInterpreterEx
 
 from pdf2zh.config import ConfigManager
-from babeldoc.assets.assets import get_font_and_metadata
+# from babeldoc.assets.assets import get_font_and_metadata
 
 NOTO_NAME = "noto"
 

@@ -1,5 +1,5 @@
 import asyncio
-import cgi
+# import cgi
 import os
 import shutil
 import uuid
@@ -18,6 +18,7 @@ from pdf2zh import __version__
 from pdf2zh.high_level import translate
 from pdf2zh.doclayout import ModelInstance
 from pdf2zh.config import ConfigManager
+from pdf2zh.ppt_process import translate_ppt
 from pdf2zh.translator import (
     AnythingLLMTranslator,
     AzureOpenAITranslator,
@@ -44,12 +45,12 @@ from pdf2zh.translator import (
     QwenMtTranslator,
     X302AITranslator,
 )
-from babeldoc.docvision.doclayout import OnnxModel
-from babeldoc import __version__ as babeldoc_version
+# from babeldoc.docvision.doclayout import OnnxModel
+# from babeldoc import __version__ as babeldoc_version
 
 logger = logging.getLogger(__name__)
 
-BABELDOC_MODEL = OnnxModel.load_available()
+# BABELDOC_MODEL = OnnxModel.load_available()
 # The following variables associate strings with translators
 service_map: dict[str, BaseTranslator] = {
     "Google": GoogleTranslator,
@@ -131,10 +132,14 @@ if isinstance(enabled_services, list):
     enabled_services = default_services + enabled_services
 else:
     enabled_services = list(service_map.keys())
+    # Set default service to OpenAI if it exists
+    if "OpenAI" in enabled_services:
+        enabled_services.remove("OpenAI")
+        enabled_services.insert(0, "OpenAI")
 
 
 # Configure about Gradio show keys
-hidden_gradio_details: bool = bool(ConfigManager.get("HIDDEN_GRADIO_DETAILS"))
+hidden_gradio_details: bool = False
 
 
 # Public demo control
@@ -270,88 +275,142 @@ def translate_file(
         )
 
     filename = os.path.splitext(os.path.basename(file_path))[0]
-    file_raw = output / f"{filename}.pdf"
-    file_mono = output / f"{filename}-mono.pdf"
-    file_dual = output / f"{filename}-dual.pdf"
+    file_ext = os.path.splitext(file_path)[1].lower()
 
-    translator = service_map[service]
-    if page_range != "Others":
-        selected_page = page_map[page_range]
+    # Check if the file is a PowerPoint file
+    if file_ext in [".pptx", ".ppt"]:
+        # Translate PowerPoint file
+        file_raw = output / f"{filename}{file_ext}"
+        file_translated = output / f"{filename}-translated{file_ext}"
+
+        # Copy the input file to the output directory
+        shutil.copy(file_path, file_raw)
+
+        translator = service_map[service]
+        lang_from = lang_map[lang_from]
+        lang_to = lang_map[lang_to]
+
+        _envs = {}
+        for i, env in enumerate(translator.envs.items()):
+            _envs[env[0]] = envs[i]
+        for k, v in _envs.items():
+            if str(k).upper().endswith("API_KEY") and str(v) == "***":
+                # Load Real API_KEYs from local configure file
+                real_keys: str = ConfigManager.get_env_by_translatername(
+                    translator, k, None
+                )
+                _envs[k] = real_keys
+
+        # Initialize translator with envs
+        translator_instance = translator(envs=_envs, prompt=Template(prompt) if prompt else None, ignore_cache=ignore_cache)
+
+        try:
+            # Translate the PowerPoint file
+            translate_ppt(str(file_raw), str(file_translated), translator_instance, lang_from, lang_to)
+        except CancelledError:
+            del cancellation_event_map[session_id]
+            raise gr.Error("Translation cancelled")
+
+        print(f"Files after translation: {os.listdir(output)}")
+
+        if not file_translated.exists():
+            raise gr.Error("No output")
+
+        progress(1.0, desc="Translation complete!")
+
+        # Return the translated PowerPoint file
+        return (
+            str(file_translated),
+            str(file_translated),
+            str(file_translated),
+            gr.update(visible=True),
+            gr.update(visible=True),
+            gr.update(visible=True),
+        )
     else:
-        selected_page = []
-        for p in page_input.split(","):
-            if "-" in p:
-                start, end = p.split("-")
-                selected_page.extend(range(int(start) - 1, int(end)))
-            else:
-                selected_page.append(int(p) - 1)
-    lang_from = lang_map[lang_from]
-    lang_to = lang_map[lang_to]
+        # Translate PDF file as before
+        file_raw = output / f"{filename}.pdf"
+        file_mono = output / f"{filename}-mono.pdf"
+        file_dual = output / f"{filename}-dual.pdf"
 
-    _envs = {}
-    for i, env in enumerate(translator.envs.items()):
-        _envs[env[0]] = envs[i]
-    for k, v in _envs.items():
-        if str(k).upper().endswith("API_KEY") and str(v) == "***":
-            # Load Real API_KEYs from local configure file
-            real_keys: str = ConfigManager.get_env_by_translatername(
-                translator, k, None
-            )
-            _envs[k] = real_keys
+        translator = service_map[service]
+        if page_range != "Others":
+            selected_page = page_map[page_range]
+        else:
+            selected_page = []
+            for p in page_input.split(","):
+                if "-" in p:
+                    start, end = p.split("-")
+                    selected_page.extend(range(int(start) - 1, int(end)))
+                else:
+                    selected_page.append(int(p) - 1)
+        lang_from = lang_map[lang_from]
+        lang_to = lang_map[lang_to]
 
-    print(f"Files before translation: {os.listdir(output)}")
+        _envs = {}
+        for i, env in enumerate(translator.envs.items()):
+            _envs[env[0]] = envs[i]
+        for k, v in _envs.items():
+            if str(k).upper().endswith("API_KEY") and str(v) == "***":
+                # Load Real API_KEYs from local configure file
+                real_keys: str = ConfigManager.get_env_by_translatername(
+                    translator, k, None
+                )
+                _envs[k] = real_keys
 
-    def progress_bar(t: tqdm.tqdm):
-        desc = getattr(t, "desc", "Translating...")
-        if desc == "":
-            desc = "Translating..."
-        progress(t.n / t.total, desc=desc)
+        print(f"Files before translation: {os.listdir(output)}")
 
-    try:
-        threads = int(threads)
-    except ValueError:
-        threads = 1
+        def progress_bar(t: tqdm.tqdm):
+            desc = getattr(t, "desc", "Translating...")
+            if desc == "":
+                desc = "Translating..."
+            progress(t.n / t.total, desc=desc)
 
-    param = {
-        "files": [str(file_raw)],
-        "pages": selected_page,
-        "lang_in": lang_from,
-        "lang_out": lang_to,
-        "service": f"{translator.name}",
-        "output": output,
-        "thread": int(threads),
-        "callback": progress_bar,
-        "cancellation_event": cancellation_event_map[session_id],
-        "envs": _envs,
-        "prompt": Template(prompt) if prompt else None,
-        "skip_subset_fonts": skip_subset_fonts,
-        "ignore_cache": ignore_cache,
-        "vfont": vfont,  # 添加自定义公式字体正则表达式
-        "model": ModelInstance.value,
-    }
+        try:
+            threads = int(threads)
+        except ValueError:
+            threads = 1
 
-    try:
-        if use_babeldoc:
-            return babeldoc_translate_file(**param)
-        translate(**param)
-    except CancelledError:
-        del cancellation_event_map[session_id]
-        raise gr.Error("Translation cancelled")
-    print(f"Files after translation: {os.listdir(output)}")
+        param = {
+            "files": [str(file_raw)],
+            "pages": selected_page,
+            "lang_in": lang_from,
+            "lang_out": lang_to,
+            "service": f"{translator.name}",
+            "output": output,
+            "thread": int(threads),
+            "callback": progress_bar,
+            "cancellation_event": cancellation_event_map[session_id],
+            "envs": _envs,
+            "prompt": Template(prompt) if prompt else None,
+            "skip_subset_fonts": skip_subset_fonts,
+            "ignore_cache": ignore_cache,
+            "vfont": vfont,  # 添加自定义公式字体正则表达式
+            "model": ModelInstance.value,
+        }
 
-    if not file_mono.exists() or not file_dual.exists():
-        raise gr.Error("No output")
+        try:
+            if use_babeldoc:
+                return babeldoc_translate_file(**param)
+            translate(**param)
+        except CancelledError:
+            del cancellation_event_map[session_id]
+            raise gr.Error("Translation cancelled")
+        print(f"Files after translation: {os.listdir(output)}")
 
-    progress(1.0, desc="Translation complete!")
+        if not file_mono.exists() or not file_dual.exists():
+            raise gr.Error("No output")
 
-    return (
-        str(file_mono),
-        str(file_mono),
-        str(file_dual),
-        gr.update(visible=True),
-        gr.update(visible=True),
-        gr.update(visible=True),
-    )
+        progress(1.0, desc="Translation complete!")
+
+        return (
+            str(file_mono),
+            str(file_mono),
+            str(file_dual),
+            gr.update(visible=True),
+            gr.update(visible=True),
+            gr.update(visible=True),
+        )
 
 
 def babeldoc_translate_file(**kwargs):
@@ -517,7 +576,7 @@ tech_details_string = f"""
                     - BabelDOC: <a href="https://github.com/funstory-ai/BabelDOC">funstory-ai/BabelDOC</a><br>
                     - GUI by: <a href="https://github.com/reycn">Rongxin</a><br>
                     - pdf2zh Version: {__version__} <br>
-                    - BabelDOC Version: {babeldoc_version}
+                    - BabelDOC Version: N/A
                 """
 cancellation_event_map = {}
 
@@ -546,7 +605,7 @@ with gr.Blocks(
             file_input = gr.File(
                 label="File",
                 file_count="single",
-                file_types=[".pdf"],
+                file_types=[".pdf", ".pptx", ".ppt"],
                 type="filepath",
                 elem_classes=["input-file"],
             )
@@ -708,7 +767,7 @@ with gr.Blocks(
 
         with gr.Column(scale=2):
             gr.Markdown("## Preview")
-            preview = PDF(label="Document Preview", visible=True, height=2000)
+            preview = PDF(label="Document Preview", visible=True)
 
     # Event handlers
     file_input.upload(
@@ -802,7 +861,7 @@ def parse_user_passwd(file_path: str) -> tuple:
 
 
 def setup_gui(
-    share: bool = False, auth_file: list = ["", ""], server_port=7860
+    share: bool = False, auth_file: list = ["", ""], server_port=7861
 ) -> None:
     """
     Setup the GUI with the given parameters.
