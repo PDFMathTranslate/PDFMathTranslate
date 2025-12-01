@@ -546,7 +546,7 @@ with gr.Blocks(
             file_input = gr.File(
                 label="File",
                 file_count="single",
-                file_types=[".pdf"],
+                file_types=[".pdf", ".pptx", ".ppt"],
                 type="filepath",
                 elem_classes=["input-file"],
             )
@@ -559,7 +559,7 @@ with gr.Blocks(
             service = gr.Dropdown(
                 label="Service",
                 choices=enabled_services,
-                value=enabled_services[0],
+                value="OpenAI",
             )
             envs = []
             for i in range(3):
@@ -568,6 +568,44 @@ with gr.Blocks(
                         visible=False,
                         interactive=True,
                     )
+                )
+            # Initialize OpenAI service environment variables on load
+            translator = service_map["OpenAI"]
+            for i, env in enumerate(translator.envs.items()):
+                label = env[0]
+                value = ConfigManager.get_env_by_translatername(
+                    translator, env[0], env[1]
+                )
+                visible = True
+                if hidden_gradio_details:
+                    if (
+                        "MODEL" not in str(label).upper()
+                        and value
+                        and hidden_gradio_details
+                    ):
+                        visible = False
+                    # Hidden Keys From Gradio
+                    if "API_KEY" in label.upper():
+                        value = "***"  # We use "***" Present Real API_KEY
+                # Update the textbox directly when creating it
+                envs[i] = gr.Textbox(
+                    label=label,
+                    value=value,
+                    visible=visible,
+                    interactive=True,
+                )
+            # Add prompt textbox if needed
+            if translator.CustomPrompt:
+                prompt = gr.Textbox(
+                    label="Custom Prompt for llm",
+                    interactive=True,
+                    visible=True,
+                )
+            else:
+                prompt = gr.Textbox(
+                    label="Custom Prompt for llm",
+                    interactive=True,
+                    visible=False,
                 )
             with gr.Row():
                 lang_from = gr.Dropdown(
@@ -802,7 +840,7 @@ def parse_user_passwd(file_path: str) -> tuple:
 
 
 def setup_gui(
-    share: bool = False, auth_file: list = ["", ""], server_port=7860
+    share: bool = False, auth_file: list = ["", ""], server_port=7863
 ) -> None:
     """
     Setup the GUI with the given parameters.
