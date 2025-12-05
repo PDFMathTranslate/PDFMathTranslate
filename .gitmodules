@@ -1,0 +1,3 @@
+[submodule "pdf2zh/pdf2zh.kernel.experimental"]
+	path = pdf2zh/pdf2zh.kernel.experimental
+	url = https://github.com/PDFMathTranslate/PDFMathTranslate-next.git
