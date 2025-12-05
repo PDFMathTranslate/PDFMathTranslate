@@ -19,9 +19,9 @@ from pdf2zh.doclayout import OnnxModel, ModelInstance
 import os
 
 from pdf2zh.config import ConfigManager
-from babeldoc.translation_config import TranslationConfig as YadtConfig
-from babeldoc.high_level import async_translate as yadt_translate
-from babeldoc.high_level import init as yadt_init
+from babeldoc.format.pdf.translation_config import TranslationConfig as YadtConfig
+from babeldoc.format.pdf.high_level import async_translate as yadt_translate
+from babeldoc.format.pdf.high_level import init as yadt_init
 from babeldoc.main import create_progress_handler
 
 logger = logging.getLogger(__name__)
