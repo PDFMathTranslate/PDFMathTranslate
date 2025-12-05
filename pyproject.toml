@@ -34,8 +34,35 @@ dependencies = [
     "pikepdf",
     "peewee>=3.17.8",
     "fontTools",
-    "babeldoc>=0.1.22, <0.3.0",
+    "rich",  "requests",
+    # for arm64 linux whells
+    "pymupdf<1.25.3",
+    "tqdm",
+    "tenacity",
+    "numpy",
+    "ollama",
+    "xinference-client",
+    "deepl",
+    "openai>=1.0.0",
+    "azure-ai-translation-text<=1.0.1",
+    # 5.36 has a bug, webui starts with a white screen
+    "gradio<5.36",
+    "tencentcloud-sdk-python-tmt",
+    "gradio-pdf>=0.0.21",
+    "peewee>=3.17.8",
+    "fontTools",
+    "babeldoc>=0.5.20,<0.6.0",
     "rich",
+    "pydantic-settings>=2.8.1",
+    "pydantic>=2.10.6",
+    "httpx>=0.28.1",
+    "sse-starlette>=2.3.3",
+    "fastapi>=0.115.12",
+    "uvicorn>=0.34.2",
+    "legacy-cgi; python_version >= '3.13'",
+    "chardet>=5.2.0",
+    "gradio-i18n==0.3.4", # since we have hooked it for language selection
+    "pyyaml>=6.0.2",
 ]
 
 [project.optional-dependencies]
@@ -70,6 +97,7 @@ build-backend = "hatchling.build"
 
 [project.scripts]
 pdf2zh = "pdf2zh.pdf2zh:main"
+pdf2zh_next = "pdf2zh.kernel.experimental.main:cli"
 
 [tool.flake8]
 ignore = ["E203", "E261", "E501", "W503", "E741"]

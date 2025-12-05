@@ -8,6 +8,8 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import shutil
+import subprocess
 from string import Template
 from typing import List, Optional
 
@@ -137,6 +139,14 @@ def create_parser() -> argparse.ArgumentParser:
         "--prompt",
         type=str,
         help="user custom prompt.",
+    )
+    
+    parse_params.add_argument(
+        "--kernel",
+        type=str,
+        help="User a selected kernel to translate the pdf file.",
+        choices=["legacy", "experimental"],
+        default="legacy",
     )
 
     parse_params.add_argument(
@@ -323,6 +333,16 @@ def main(args: Optional[List[str]] = None) -> int:
         untranlate_file = find_all_files_in_directory(parsed_args.files[0])
         parsed_args.files = untranlate_file
         translate(model=ModelInstance.value, **vars(parsed_args))
+        return 0
+
+    if parsed_args.kernel == "experimental":
+        # TODO: Implement the next kernel using native calling instead of a cli wrapper.
+        
+        # first detect if `pdf2zh.kernel.experimental` is properly installed
+        if not shutil.which("pdf2zh.kernel.experimental"):
+            raise ValueError("pdf2zh.kernel.experimental is not installed. Please install it using `pip install pdf2zh.kernel.experimental`.")
+        # then call the pdf2zh.kernel.experimental cli
+        subprocess.run(["pdf2zh.kernel.experimental", parsed_args.files[0]], check=True)
         return 0
 
     translate(model=ModelInstance.value, **vars(parsed_args))
