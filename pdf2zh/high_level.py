@@ -21,7 +21,7 @@ from pdfminer.pdfexceptions import PDFValueError
 from pdfminer.pdfinterp import PDFResourceManager
 from pdfminer.pdfpage import PDFPage
 from pdfminer.pdfparser import PDFParser
-from pymupdf import Document, Font
+from pymupdf import Document, Font, Rect
 
 from pdf2zh.converter import TranslateConverter
 from pdf2zh.doclayout import OnnxModel
@@ -280,17 +280,58 @@ def translate_stream(
         # print(ops_new.encode())
         doc_zh.update_stream(obj_id, ops_new.encode())
 
-    doc_en.insert_file(doc_zh)
-    for id in range(page_count):
-        doc_en.move_page(page_count + id, id * 2 + 1)
+    def build_side_by_side_doc(
+        source_doc: Document, translated_doc: Document, page_indexes: list[int]
+    ) -> Document:
+        dual_doc = Document()
+        for p in page_indexes:
+            source_rect = source_doc[p].rect
+            translated_rect = translated_doc[p].rect
+            left_width = float(source_rect.width)
+            right_width = float(translated_rect.width)
+            page_height = float(max(source_rect.height, translated_rect.height))
+
+            dual_page = dual_doc.new_page(
+                width=left_width + right_width, height=page_height
+            )
+            dual_page.show_pdf_page(
+                Rect(0, 0, left_width, page_height), source_doc, p, keep_proportion=True
+            )
+            dual_page.show_pdf_page(
+                Rect(left_width, 0, left_width + right_width, page_height),
+                translated_doc,
+                p,
+                keep_proportion=True,
+            )
+        return dual_doc
+
+    if pages:
+        selected_pages = sorted({p for p in pages if 0 <= p < page_count})
+        if not selected_pages:
+            raise PDFValueError("No valid pages selected.")
+        mono_doc = Document()
+        for p in selected_pages:
+            mono_doc.insert_pdf(doc_zh, from_page=p, to_page=p)
+        dual_doc = build_side_by_side_doc(doc_en, doc_zh, selected_pages)
+        if not skip_subset_fonts:
+            mono_doc.subset_fonts(fallback=True)
+            dual_doc.subset_fonts(fallback=True)
+        # Avoid aggressive xref cleanup/object-stream rewrite because some PDFs
+        # with broken references can hang in MuPDF's writer.
+        return (
+            mono_doc.write(deflate=True, garbage=0, use_objstms=0),
+            dual_doc.write(deflate=True, garbage=0, use_objstms=0),
+        )
+
+    dual_doc = build_side_by_side_doc(doc_en, doc_zh, list(range(page_count)))
     if not skip_subset_fonts:
         doc_zh.subset_fonts(fallback=True)
-        doc_en.subset_fonts(fallback=True)
+        dual_doc.subset_fonts(fallback=True)
     # Avoid aggressive xref cleanup/object-stream rewrite because some PDFs
     # with broken references can hang in MuPDF's writer.
     return (
         doc_zh.write(deflate=True, garbage=0, use_objstms=0),
-        doc_en.write(deflate=True, garbage=0, use_objstms=0),
+        dual_doc.write(deflate=True, garbage=0, use_objstms=0),
     )
 
 
