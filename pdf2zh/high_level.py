@@ -86,9 +86,24 @@ def translate_patch(
     envs: Dict = None,
     prompt: Template = None,
     ignore_cache: bool = False,
-    extracted_data_path: str = None,
+    source_data_path: str = None,
+    translated_data_path: str = None,
+    translation_file: str = None,
     **kwarg: Any,
 ) -> None:
+    translation_map: Dict[str, str] = {}
+    if translation_file:
+        with open(translation_file, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict) and isinstance(loaded.get("translations"), dict):
+            translation_map = loaded["translations"]
+        elif isinstance(loaded, dict):
+            translation_map = loaded
+        else:
+            raise ValueError(
+                "translation_file must be a JSON object or {\"translations\": {...}}."
+            )
+
     rsrcmgr = PDFResourceManager()
     layout = {}
     device = TranslateConverter(
@@ -105,6 +120,7 @@ def translate_patch(
         envs,
         prompt,
         ignore_cache,
+        translation_map,
     )
 
     assert device is not None
@@ -164,22 +180,27 @@ def translate_patch(
             doc_zh[page.pageno].set_contents(page.page_xref)
             interpreter.process_page(page)
 
+    if source_data_path:
+        source_data = {
+            "lang_in": lang_in,
+            "lang_out": lang_out,
+            "pages": device.page_data,
+        }
+        with open(source_data_path, "w", encoding="utf-8") as f:
+            json.dump(source_data, f, ensure_ascii=False, indent=2)
+        logger.info(f"Source data saved to: {source_data_path}")
+
     # Batch mode: translate all collected texts and typeset deferred pages
     if device.batch_mode:
         device.flush_batch(obj_patch)
 
     device.close()
 
-    if extracted_data_path:
-        data = {
-            "lang_in": lang_in,
-            "lang_out": lang_out,
-            "service": service,
-            "pages": device.page_data,
-        }
-        with open(extracted_data_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        logger.info(f"Extracted data saved to: {extracted_data_path}")
+    if translated_data_path:
+        translated_data = {"translations": device.translations}
+        with open(translated_data_path, "w", encoding="utf-8") as f:
+            json.dump(translated_data, f, ensure_ascii=False, indent=2)
+        logger.info(f"Translated data saved to: {translated_data_path}")
 
     return obj_patch
 
@@ -200,7 +221,9 @@ def translate_stream(
     prompt: Template = None,
     skip_subset_fonts: bool = False,
     ignore_cache: bool = False,
-    extracted_data_path: str = None,
+    source_data_path: str = None,
+    translated_data_path: str = None,
+    translation_file: str = None,
     **kwarg: Any,
 ):
     font_list = [("tiro", None)]
@@ -336,6 +359,7 @@ def translate(
     prompt: Template = None,
     skip_subset_fonts: bool = False,
     ignore_cache: bool = False,
+    translation_file: str = None,
     **kwarg: Any,
 ):
     if not files:
@@ -399,7 +423,8 @@ def translate(
         except Exception as e:
             logger.warning(f"Failed to clean temp file {file_path}", exc_info=True)
 
-        extracted_data_path = str(Path(output) / f"{filename}.json")
+        source_data_path = str(Path(output) / f"{filename}.source.json")
+        translated_data_path = str(Path(output) / f"{filename}.translated.json")
         s_mono, s_dual = translate_stream(
             s_raw,
             **locals(),

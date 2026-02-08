@@ -153,6 +153,7 @@ class TranslateConverter(PDFConverterEx):
         envs: Dict = None,
         prompt: Template = None,
         ignore_cache: bool = False,
+        translation_map: Dict[str, str] = None,
     ) -> None:
         super().__init__(rsrcmgr)
         self.vfont = vfont
@@ -162,6 +163,7 @@ class TranslateConverter(PDFConverterEx):
         self.noto_name = noto_name
         self.noto = noto
         self.page_data = []
+        self.translations: Dict[str, str] = dict(translation_map) if translation_map else {}
         self.translator: BaseTranslator = None
         self.batch_mode = False
         self._pending_pages = []
@@ -181,6 +183,34 @@ class TranslateConverter(PDFConverterEx):
         # Enable batch mode for translators that support batch API
         if hasattr(self.translator, 'translate_batch'):
             self.batch_mode = True
+
+    def _collect_source_page_data(self, ltpage, sstk, pstk, var):
+        """Collect Phase A output (source text + layout) for source.json."""
+        page_info = {
+            "page_number": ltpage.pageid,
+            "paragraphs": [],
+            "formulas": [],
+        }
+        for s, p in zip(sstk, pstk):
+            page_info["paragraphs"].append({
+                "source": s,
+                "position": {
+                    "x": round(float(p.x), 2),
+                    "y": round(float(p.y), 2),
+                    "x0": round(float(p.x0), 2),
+                    "x1": round(float(p.x1), 2),
+                    "y0": round(float(p.y0), 2),
+                    "y1": round(float(p.y1), 2),
+                },
+                "font_size": round(float(p.size), 2),
+                "has_line_break": p.brk,
+            })
+        for i, v in enumerate(var):
+            page_info["formulas"].append({
+                "id": f"v{i}",
+                "text": "".join([ch.get_text() for ch in v]),
+            })
+        self.page_data.append(page_info)
 
     def receive_layout(self, ltpage: LTPage):
         # 段落
@@ -356,6 +386,10 @@ class TranslateConverter(PDFConverterEx):
             log.debug(f'< {l:.1f} {v[0].x0:.1f} {v[0].y0:.1f} {v[0].cid} {v[0].fontname} {len(varl[id])} > v{id} = {"".join([ch.get_text() for ch in v])}')
             vlen.append(l)
 
+        # Persist Phase A output immediately after extraction.
+        if isinstance(ltpage, LTPage):
+            self._collect_source_page_data(ltpage, sstk, pstk, var)
+
         ############################################################
         # Batch mode: defer translation and typesetting
         if self.batch_mode and isinstance(ltpage, LTPage):
@@ -394,8 +428,18 @@ class TranslateConverter(PDFConverterEx):
 
         # 1. Batch translate all texts (results stored in cache)
         all_texts = self.get_collected_texts()
-        if all_texts:
-            self.translator.translate_batch(all_texts)
+        if all_texts and hasattr(self.translator, "translate_batch"):
+            missing_texts = []
+            seen = set()
+            for text in all_texts:
+                if text in seen:
+                    continue
+                seen.add(text)
+                if text in self.translations:
+                    continue
+                missing_texts.append(text)
+            if missing_texts:
+                self.translator.translate_batch(missing_texts)
 
         # 2. Process each pending page (Phase B + C)
         original_fontmap = self.fontmap
@@ -425,8 +469,11 @@ class TranslateConverter(PDFConverterEx):
         def worker(s: str):  # 多线程翻译
             if _should_skip(s):  # 空白和公式不翻译
                 return s
+            if s in self.translations:
+                return self.translations[s]
             try:
                 new = self.translator.translate(s)
+                self.translations[s] = new
                 return new
             except BaseException as e:
                 if log.isEnabledFor(logging.DEBUG):
@@ -438,35 +485,6 @@ class TranslateConverter(PDFConverterEx):
             max_workers=self.thread
         ) as executor:
             news = list(executor.map(worker, sstk))
-
-        # 中間データ保存
-        if isinstance(ltpage, LTPage):
-            page_info = {
-                "page_number": ltpage.pageid,
-                "paragraphs": [],
-                "formulas": [],
-            }
-            for i in range(len(sstk)):
-                page_info["paragraphs"].append({
-                    "source": sstk[i],
-                    "translation": news[i],
-                    "position": {
-                        "x": round(float(pstk[i].x), 2),
-                        "y": round(float(pstk[i].y), 2),
-                        "x0": round(float(pstk[i].x0), 2),
-                        "x1": round(float(pstk[i].x1), 2),
-                        "y0": round(float(pstk[i].y0), 2),
-                        "y1": round(float(pstk[i].y1), 2),
-                    },
-                    "font_size": round(float(pstk[i].size), 2),
-                    "has_line_break": pstk[i].brk,
-                })
-            for i, v in enumerate(var):
-                page_info["formulas"].append({
-                    "id": f"v{i}",
-                    "text": "".join([ch.get_text() for ch in v]),
-                })
-            self.page_data.append(page_info)
 
         ############################################################
         # C. 新文档排版

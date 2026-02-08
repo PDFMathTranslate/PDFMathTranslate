@@ -190,6 +190,12 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Ignore cache and force retranslation.",
     )
+    parse_params.add_argument(
+        "--translation-file",
+        "-tf",
+        type=str,
+        help="Use translations from JSON file ({\"translations\": {\"source\": \"target\"}}).",
+    )
 
     parse_params.add_argument(
         "--mcp", action="store_true", help="Launch pdf2zh MCP server in STDIO mode"
