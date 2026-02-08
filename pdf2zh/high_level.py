@@ -286,9 +286,11 @@ def translate_stream(
     if not skip_subset_fonts:
         doc_zh.subset_fonts(fallback=True)
         doc_en.subset_fonts(fallback=True)
+    # Avoid aggressive xref cleanup/object-stream rewrite because some PDFs
+    # with broken references can hang in MuPDF's writer.
     return (
-        doc_zh.write(deflate=True, garbage=3, use_objstms=1),
-        doc_en.write(deflate=True, garbage=3, use_objstms=1),
+        doc_zh.write(deflate=True, garbage=0, use_objstms=0),
+        doc_en.write(deflate=True, garbage=0, use_objstms=0),
     )
 
 
@@ -373,6 +375,9 @@ def translate(
             print(f"  {file}", file=sys.stderr)
         raise PDFValueError("Some files do not exist.")
 
+    output_dir = Path(output) if output else Path(".")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     result_files = []
 
     for file in files:
@@ -423,14 +428,14 @@ def translate(
         except Exception as e:
             logger.warning(f"Failed to clean temp file {file_path}", exc_info=True)
 
-        source_data_path = str(Path(output) / f"{filename}.source.json")
-        translated_data_path = str(Path(output) / f"{filename}.translated.json")
+        source_data_path = str(output_dir / f"{filename}.source.json")
+        translated_data_path = str(output_dir / f"{filename}.translated.json")
         s_mono, s_dual = translate_stream(
             s_raw,
             **locals(),
         )
-        file_mono = Path(output) / f"{filename}-mono.pdf"
-        file_dual = Path(output) / f"{filename}-dual.pdf"
+        file_mono = output_dir / f"{filename}-mono.pdf"
+        file_dual = output_dir / f"{filename}-dual.pdf"
         doc_mono = open(file_mono, "wb")
         doc_dual = open(file_dual, "wb")
         doc_mono.write(s_mono)
