@@ -21,6 +21,7 @@ dependencies = [
     "xinference-client",
     "deepl",
     "openai>=1.0.0",
+    "google-genai>=1.0.0",
     "azure-ai-translation-text<=1.0.1",
     # 5.36 has a bug, webui starts with a white screen
     "gradio<5.36",

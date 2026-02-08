@@ -683,6 +683,157 @@ class GeminiTranslator(OpenAITranslator):
         self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
 
 
+class GeminiBatchTranslator(BaseTranslator):
+    # Gemini Batch API: 50% cost reduction via async batch processing
+    # https://ai.google.dev/gemini-api/docs/batch
+    name = "gemini-batch"
+    envs = {
+        "GEMINI_API_KEY": None,
+        "GEMINI_MODEL": "gemini-3-flash-preview",
+    }
+    CustomPrompt = True
+
+    def __init__(
+        self, lang_in, lang_out, model, envs=None, prompt=None, ignore_cache=False
+    ):
+        self.set_envs(envs)
+        api_key = self.envs["GEMINI_API_KEY"]
+        if not model:
+            model = self.envs["GEMINI_MODEL"]
+        super().__init__(lang_in, lang_out, model, ignore_cache)
+        self.prompttext = prompt
+        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+        think_filter_regex = r"^<think>.+?\n*(</think>|\n)*(</think>)\n*"
+        self.add_cache_impact_parameters("think_filter_regex", think_filter_regex)
+        self.think_filter_regex = re.compile(think_filter_regex, flags=re.DOTALL)
+
+        try:
+            from google import genai
+        except ImportError:
+            raise ImportError(
+                "google-genai package is required for gemini-batch translator. "
+                "Install with: pip install google-genai"
+            )
+        self.client = genai.Client(api_key=api_key)
+
+    def do_translate(self, text) -> str:
+        """Single text translation via google-genai SDK"""
+        messages = self.prompt(text, self.prompttext)
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=messages[0]["content"],
+            config={"temperature": 0},
+        )
+        content = response.text.strip()
+        content = self.think_filter_regex.sub("", content).strip()
+        return content
+
+    def translate_batch(self, texts: list[str]) -> None:
+        """Batch translate texts using Gemini Batch API (50% cost).
+
+        Expects pre-filtered texts (no empty/formula-only strings).
+        Deduplicates, checks cache, and submits uncached texts as batch.
+        """
+        import time
+
+        # Deduplicate and filter cached
+        unique_texts = []
+        seen = set()
+        for text in texts:
+            if text in seen:
+                continue
+            seen.add(text)
+            if not self.ignore_cache:
+                cache = self.cache.get(text)
+                if cache is not None:
+                    continue
+            unique_texts.append(text)
+
+        if not unique_texts:
+            logger.info("All texts are cached, skipping batch translation")
+            return
+
+        logger.info(f"Batch translating {len(unique_texts)} unique texts")
+
+        # Process in chunks (inline batch has 20MB limit)
+        BATCH_SIZE = 500
+        for chunk_start in range(0, len(unique_texts), BATCH_SIZE):
+            chunk = unique_texts[chunk_start : chunk_start + BATCH_SIZE]
+            self._translate_chunk(chunk)
+
+    def _translate_chunk(self, texts: list[str]) -> None:
+        """Submit and process one batch chunk."""
+        import time
+
+        # Build inline requests
+        inline_requests = []
+        for text in texts:
+            messages = self.prompt(text, self.prompttext)
+            inline_requests.append(
+                {
+                    "contents": [
+                        {
+                            "parts": [{"text": messages[0]["content"]}],
+                            "role": "user",
+                        }
+                    ],
+                }
+            )
+
+        # Submit batch job
+        batch_job = self.client.batches.create(
+            model=self.model,
+            src=inline_requests,
+            config={"display_name": "pdf-translate-batch"},
+        )
+        logger.info(f"Batch job created: {batch_job.name} ({len(texts)} texts)")
+
+        # Poll for results
+        TERMINAL_STATES = {
+            "JOB_STATE_SUCCEEDED",
+            "JOB_STATE_FAILED",
+            "JOB_STATE_CANCELLED",
+            "JOB_STATE_EXPIRED",
+        }
+        poll_interval = 5
+        while True:
+            batch_job = self.client.batches.get(name=batch_job.name)
+            state_name = (
+                batch_job.state.name
+                if hasattr(batch_job.state, "name")
+                else str(batch_job.state)
+            )
+            logger.info(f"Batch job state: {state_name}")
+            if state_name in TERMINAL_STATES:
+                break
+            time.sleep(poll_interval)
+            poll_interval = min(poll_interval * 1.5, 30)
+
+        if state_name != "JOB_STATE_SUCCEEDED":
+            raise Exception(f"Batch job failed with state: {state_name}")
+
+        # Extract results and store in cache
+        for j, inline_response in enumerate(batch_job.dest.inlined_responses):
+            if inline_response.response:
+                content = inline_response.response.text.strip()
+                content = self.think_filter_regex.sub("", content).strip()
+                self.cache.set(texts[j], content)
+            elif inline_response.error:
+                logger.error(f"Batch item {j} failed: {inline_response.error}")
+                raise Exception(
+                    f"Batch translation error: {inline_response.error}"
+                )
+
+    def get_formular_placeholder(self, id: int):
+        return "{{v" + str(id) + "}}"
+
+    def get_rich_text_left_placeholder(self, id: int):
+        return self.get_formular_placeholder(id)
+
+    def get_rich_text_right_placeholder(self, id: int):
+        return self.get_formular_placeholder(id + 1)
+
+
 class AzureTranslator(BaseTranslator):
     # https://github.com/Azure/azure-sdk-for-python
     name = "azure"

@@ -26,6 +26,7 @@ from pdf2zh.translator import (
     DeepLXTranslator,
     DeepseekTranslator,
     DifyTranslator,
+    GeminiBatchTranslator,
     GeminiTranslator,
     GoogleTranslator,
     GrokTranslator,
@@ -43,6 +44,13 @@ from pdf2zh.translator import (
 )
 
 log = logging.getLogger(__name__)
+
+# Pattern to skip: empty strings and formula-only strings like "{v0}"
+_SKIP_TRANSLATE_RE = re.compile(r"^\{v\d+\}$")
+
+def _should_skip(s: str) -> bool:
+    """Return True if string should not be translated (empty or formula-only)."""
+    return not s.strip() or bool(_SKIP_TRANSLATE_RE.match(s))
 
 
 class PDFConverterEx(PDFConverter):
@@ -62,6 +70,7 @@ class PDFConverterEx(PDFConverter):
 
     def end_page(self, page):
         # 重载返回指令流
+        self._current_page_xref = getattr(page, 'page_xref', None)
         return self.receive_layout(self.cur_item)
 
     def begin_figure(self, name, bbox, matrix) -> None:
@@ -152,7 +161,11 @@ class TranslateConverter(PDFConverterEx):
         self.layout = layout
         self.noto_name = noto_name
         self.noto = noto
+        self.page_data = []
         self.translator: BaseTranslator = None
+        self.batch_mode = False
+        self._pending_pages = []
+        self._current_page_xref = None
         # e.g. "ollama:gemma2:9b" -> ["ollama", "gemma2:9b"]
         param = service.split(":", 1)
         service_name = param[0]
@@ -160,11 +173,14 @@ class TranslateConverter(PDFConverterEx):
         if not envs:
             envs = {}
         for translator in [GoogleTranslator, BingTranslator, DeepLTranslator, DeepLXTranslator, OllamaTranslator, XinferenceTranslator, AzureOpenAITranslator,
-                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, OpenAIlikedTranslator, QwenMtTranslator, X302AITranslator]:
+                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, GeminiBatchTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, OpenAIlikedTranslator, QwenMtTranslator, X302AITranslator]:
             if service_name == translator.name:
                 self.translator = translator(lang_in, lang_out, service_model, envs=envs, prompt=prompt, ignore_cache=ignore_cache)
         if not self.translator:
             raise ValueError("Unsupported translation service")
+        # Enable batch mode for translators that support batch API
+        if hasattr(self.translator, 'translate_batch'):
+            self.batch_mode = True
 
     def receive_layout(self, ltpage: LTPage):
         # 段落
@@ -341,12 +357,73 @@ class TranslateConverter(PDFConverterEx):
             vlen.append(l)
 
         ############################################################
+        # Batch mode: defer translation and typesetting
+        if self.batch_mode and isinstance(ltpage, LTPage):
+            from copy import copy
+            self._pending_pages.append({
+                'ltpage': ltpage,
+                'sstk': sstk, 'pstk': pstk,
+                'var': var, 'varl': varl, 'varf': varf, 'vlen': vlen,
+                'lstk': lstk,
+                'fontmap': copy(self.fontmap),
+                'fontid': copy(self.fontid),
+                'page_xref': self._current_page_xref,
+            })
+            return ""
+
+        return self._translate_and_typeset(ltpage, sstk, pstk, var, varl, varf, vlen, lstk)
+
+    def get_collected_texts(self) -> list[str]:
+        """Return all translatable texts from pending pages (batch mode)."""
+        texts = []
+        for page in self._pending_pages:
+            for s in page['sstk']:
+                if not _should_skip(s):
+                    texts.append(s)
+        return texts
+
+    def flush_batch(self, obj_patch) -> None:
+        """Batch translate all pending pages and generate typeset ops.
+
+        Called after all pages have been processed in batch mode.
+        Translates all collected texts in one batch, then runs
+        Phase B+C for each page.
+        """
+        if not self._pending_pages:
+            return
+
+        # 1. Batch translate all texts (results stored in cache)
+        all_texts = self.get_collected_texts()
+        if all_texts:
+            self.translator.translate_batch(all_texts)
+
+        # 2. Process each pending page (Phase B + C)
+        original_fontmap = self.fontmap
+        original_fontid = self.fontid
+        for page_data in self._pending_pages:
+            self.fontmap = page_data['fontmap']
+            self.fontid = page_data['fontid']
+            ops = self._translate_and_typeset(
+                page_data['ltpage'], page_data['sstk'], page_data['pstk'],
+                page_data['var'], page_data['varl'], page_data['varf'],
+                page_data['vlen'], page_data['lstk'],
+            )
+            # Append generated ops to the obj_patch entry
+            page_xref = page_data['page_xref']
+            if page_xref is not None and page_xref in obj_patch:
+                obj_patch[page_xref] += ops
+        self.fontmap = original_fontmap
+        self.fontid = original_fontid
+
+    def _translate_and_typeset(self, ltpage, sstk, pstk, var, varl, varf, vlen, lstk):
+        """Phase B (translate) + Phase C (typeset). Returns ops string."""
+        ############################################################
         # B. 段落翻译
         log.debug("\n==========[SSTACK]==========\n")
 
         @retry(wait=wait_fixed(1))
         def worker(s: str):  # 多线程翻译
-            if not s.strip() or re.match(r"^\{v\d+\}$", s):  # 空白和公式不翻译
+            if _should_skip(s):  # 空白和公式不翻译
                 return s
             try:
                 new = self.translator.translate(s)
@@ -361,6 +438,35 @@ class TranslateConverter(PDFConverterEx):
             max_workers=self.thread
         ) as executor:
             news = list(executor.map(worker, sstk))
+
+        # 中間データ保存
+        if isinstance(ltpage, LTPage):
+            page_info = {
+                "page_number": ltpage.pageid,
+                "paragraphs": [],
+                "formulas": [],
+            }
+            for i in range(len(sstk)):
+                page_info["paragraphs"].append({
+                    "source": sstk[i],
+                    "translation": news[i],
+                    "position": {
+                        "x": round(float(pstk[i].x), 2),
+                        "y": round(float(pstk[i].y), 2),
+                        "x0": round(float(pstk[i].x0), 2),
+                        "x1": round(float(pstk[i].x1), 2),
+                        "y0": round(float(pstk[i].y0), 2),
+                        "y1": round(float(pstk[i].y1), 2),
+                    },
+                    "font_size": round(float(pstk[i].size), 2),
+                    "has_line_break": pstk[i].brk,
+                })
+            for i, v in enumerate(var):
+                page_info["formulas"].append({
+                    "id": f"v{i}",
+                    "text": "".join([ch.get_text() for ch in v]),
+                })
+            self.page_data.append(page_info)
 
         ############################################################
         # C. 新文档排版
