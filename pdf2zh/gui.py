@@ -271,8 +271,6 @@ def translate_file(
 
     filename = os.path.splitext(os.path.basename(file_path))[0]
     file_raw = output / f"{filename}.pdf"
-    file_mono = output / f"{filename}-mono.pdf"
-    file_dual = output / f"{filename}-dual.pdf"
 
     translator = service_map[service]
     if page_range != "Others":
@@ -333,12 +331,17 @@ def translate_file(
     try:
         if use_babeldoc:
             return babeldoc_translate_file(**param)
-        translate(**param)
+        result_files = translate(**param)
     except CancelledError:
         del cancellation_event_map[session_id]
         raise gr.Error("Translation cancelled")
     print(f"Files after translation: {os.listdir(output)}")
 
+    if not result_files:
+        raise gr.Error("No output")
+
+    file_mono = Path(result_files[0][0])
+    file_dual = Path(result_files[0][1])
     if not file_mono.exists() or not file_dual.exists():
         raise gr.Error("No output")
 

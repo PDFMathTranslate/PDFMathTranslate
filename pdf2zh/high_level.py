@@ -8,6 +8,8 @@ import re
 import sys
 import tempfile
 import logging
+import hashlib
+from datetime import datetime
 from asyncio import CancelledError
 from pathlib import Path
 from string import Template
@@ -68,6 +70,84 @@ def check_files(files: List[str]) -> List[str]:
     return missing_files
 
 
+def _sanitize_slug(text: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9._-]+", "-", str(text)).strip("-") or "unknown"
+
+
+def _pages_signature(pages: Optional[list[int]]) -> str:
+    if not pages:
+        return "all"
+    selected = sorted({p for p in pages if p >= 0})
+    if not selected:
+        return "all"
+    # Convert 0-based to 1-based and compact ranges.
+    one_based = [p + 1 for p in selected]
+    ranges = []
+    start = prev = one_based[0]
+    for current in one_based[1:]:
+        if current == prev + 1:
+            prev = current
+            continue
+        ranges.append(f"{start}-{prev}" if start != prev else f"{start}")
+        start = prev = current
+    ranges.append(f"{start}-{prev}" if start != prev else f"{start}")
+    return "_".join(ranges)
+
+
+def _content_fingerprint(data: bytes) -> str:
+    return hashlib.sha1(data).hexdigest()[:10]
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as tmp:
+        tmp.write(data)
+        tmp_path = Path(tmp.name)
+    os.replace(tmp_path, path)
+
+
+def _atomic_write_json(path: Path, payload: dict) -> None:
+    _atomic_write_bytes(
+        path, json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    )
+
+
+def _load_translation_map(translation_file: str) -> Dict[str, str]:
+    path = Path(translation_file)
+    translation_map: Dict[str, str] = {}
+    if path.is_dir():
+        pages_dir = path / "pages" if (path / "pages").is_dir() else path
+        for page_file in sorted(pages_dir.glob("*.json")):
+            with open(page_file, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            if not isinstance(loaded, dict):
+                continue
+            if isinstance(loaded.get("translations"), dict):
+                translation_map.update(loaded["translations"])
+            elif all(
+                isinstance(k, str) and isinstance(v, str)
+                for k, v in loaded.items()
+            ):
+                translation_map.update(loaded)
+        if not translation_map:
+            raise ValueError(
+                "translation_file directory must contain JSON with translations."
+            )
+        return translation_map
+
+    with open(path, "r", encoding="utf-8") as f:
+        loaded = json.load(f)
+    if isinstance(loaded, dict) and isinstance(loaded.get("translations"), dict):
+        return loaded["translations"]
+    if isinstance(loaded, dict) and all(
+        isinstance(k, str) and isinstance(v, str) for k, v in loaded.items()
+    ):
+        return loaded
+    raise ValueError(
+        "translation_file must be a JSON object, {'translations': {...}}, or a pages directory."
+    )
+
+
 def translate_patch(
     inf: BinaryIO,
     pages: Optional[list[int]] = None,
@@ -88,21 +168,13 @@ def translate_patch(
     ignore_cache: bool = False,
     source_data_path: str = None,
     translated_data_path: str = None,
+    page_artifacts_dir: str = None,
     translation_file: str = None,
     **kwarg: Any,
 ) -> None:
     translation_map: Dict[str, str] = {}
     if translation_file:
-        with open(translation_file, "r", encoding="utf-8") as f:
-            loaded = json.load(f)
-        if isinstance(loaded, dict) and isinstance(loaded.get("translations"), dict):
-            translation_map = loaded["translations"]
-        elif isinstance(loaded, dict):
-            translation_map = loaded
-        else:
-            raise ValueError(
-                "translation_file must be a JSON object or {\"translations\": {...}}."
-            )
+        translation_map = _load_translation_map(translation_file)
 
     rsrcmgr = PDFResourceManager()
     layout = {}
@@ -186,8 +258,7 @@ def translate_patch(
             "lang_out": lang_out,
             "pages": device.page_data,
         }
-        with open(source_data_path, "w", encoding="utf-8") as f:
-            json.dump(source_data, f, ensure_ascii=False, indent=2)
+        _atomic_write_json(Path(source_data_path), source_data)
         logger.info(f"Source data saved to: {source_data_path}")
 
     # Batch mode: translate all collected texts and typeset deferred pages
@@ -198,9 +269,33 @@ def translate_patch(
 
     if translated_data_path:
         translated_data = {"translations": device.translations}
-        with open(translated_data_path, "w", encoding="utf-8") as f:
-            json.dump(translated_data, f, ensure_ascii=False, indent=2)
+        _atomic_write_json(Path(translated_data_path), translated_data)
         logger.info(f"Translated data saved to: {translated_data_path}")
+
+    if page_artifacts_dir:
+        page_dir = Path(page_artifacts_dir)
+        page_dir.mkdir(parents=True, exist_ok=True)
+        for page in device.page_data:
+            page_number = int(page.get("page_number", 0))
+            page_payload = {
+                "lang_in": lang_in,
+                "lang_out": lang_out,
+                "page_number": page_number,
+                "paragraphs": page.get("paragraphs", []),
+                "formulas": page.get("formulas", []),
+                "translations": {},
+            }
+            for paragraph in page_payload["paragraphs"]:
+                source_text = paragraph.get("source")
+                if source_text is None:
+                    continue
+                if source_text in device.translations:
+                    page_payload["translations"][source_text] = device.translations[
+                        source_text
+                    ]
+            page_file = page_dir / f"{page_number + 1:04d}.json"
+            _atomic_write_json(page_file, page_payload)
+        logger.info(f"Page artifacts saved to: {page_artifacts_dir}")
 
     return obj_patch
 
@@ -223,6 +318,7 @@ def translate_stream(
     ignore_cache: bool = False,
     source_data_path: str = None,
     translated_data_path: str = None,
+    page_artifacts_dir: str = None,
     translation_file: str = None,
     **kwarg: Any,
 ):
@@ -469,20 +565,51 @@ def translate(
         except Exception as e:
             logger.warning(f"Failed to clean temp file {file_path}", exc_info=True)
 
-        source_data_path = str(output_dir / f"{filename}.source.json")
-        translated_data_path = str(output_dir / f"{filename}.translated.json")
+        doc_id = f"{_sanitize_slug(filename)}-{_content_fingerprint(s_raw)}"
+        pages_sig = _pages_signature(pages)
+        service_slug = _sanitize_slug(service)
+        lang_pair = f"{_sanitize_slug(lang_in)}-{_sanitize_slug(lang_out)}"
+        run_id = f"p{pages_sig}__{lang_pair}__{service_slug}"
+        run_stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        artifacts_dir = output_dir / "artifacts" / doc_id
+        json_root_dir = artifacts_dir / "json"
+        pdf_root_dir = artifacts_dir / "pdf"
+        run_name = f"{run_id}__{run_stamp}"
+        run_dir = json_root_dir / run_name
+        page_artifacts_dir = str(run_dir / "pages")
+        source_data_path = None
+        translated_data_path = None
         s_mono, s_dual = translate_stream(
             s_raw,
             **locals(),
         )
-        file_mono = output_dir / f"{filename}-mono.pdf"
-        file_dual = output_dir / f"{filename}-dual.pdf"
-        doc_mono = open(file_mono, "wb")
-        doc_dual = open(file_dual, "wb")
-        doc_mono.write(s_mono)
-        doc_dual.write(s_dual)
-        doc_mono.close()
-        doc_dual.close()
+        run_file_base = f"{filename}__{run_id}__{run_stamp}"
+        file_mono = pdf_root_dir / f"{run_file_base}-mono.pdf"
+        file_dual = pdf_root_dir / f"{run_file_base}-dual.pdf"
+        _atomic_write_bytes(file_mono, s_mono)
+        _atomic_write_bytes(file_dual, s_dual)
+        manifest = {
+            "schema_version": 1,
+            "doc_id": doc_id,
+            "run_id": run_name,
+            "filename": filename,
+            "pages_signature": pages_sig,
+            "selected_pages_1based": (
+                [p + 1 for p in sorted({p for p in pages if p >= 0})] if pages else None
+            ),
+            "lang_in": lang_in,
+            "lang_out": lang_out,
+            "service": service,
+            "created_at": datetime.strptime(run_stamp, "%Y%m%d-%H%M%S-%f").isoformat(timespec="seconds"),
+            "outputs": {
+                "mono_pdf": f"../pdf/{file_mono.name}",
+                "dual_pdf": f"../pdf/{file_dual.name}",
+            },
+            "artifacts": {
+                "pages_dir": "pages",
+            },
+        }
+        _atomic_write_json(run_dir / "manifest.json", manifest)
         result_files.append((str(file_mono), str(file_dual)))
 
     return result_files

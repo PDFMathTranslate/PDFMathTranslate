@@ -5,8 +5,10 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.routing import Mount, Route
 from pdf2zh import translate_stream
+from pdf2zh.high_level import _sanitize_slug, _atomic_write_bytes
 from pdf2zh.doclayout import ModelInstance
 from pathlib import Path
+from datetime import datetime
 
 import contextlib
 import io
@@ -42,12 +44,15 @@ def create_mcp_app() -> FastMCP:
         await ctx.log(level="info", message="translate complete")
         output_path = Path(os.path.dirname(file))
         filename = os.path.splitext(os.path.basename(file))[0]
-        doc_mono = output_path / f"{filename}-mono.pdf"
-        doc_dual = output_path / f"{filename}-dual.pdf"
-        with open(doc_mono, "wb") as f:
-            f.write(doc_mono_bytes)
-        with open(doc_dual, "wb") as f:
-            f.write(doc_dual_bytes)
+        run_stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        run_base = (
+            f"{filename}__pall__{_sanitize_slug(lang_in)}-{_sanitize_slug(lang_out)}"
+            f"__google__{run_stamp}"
+        )
+        doc_mono = output_path / f"{run_base}-mono.pdf"
+        doc_dual = output_path / f"{run_base}-dual.pdf"
+        _atomic_write_bytes(doc_mono, doc_mono_bytes)
+        _atomic_write_bytes(doc_dual, doc_dual_bytes)
         return f"""------------
     translate complete
     mono pdf file: {doc_mono.absolute()}
