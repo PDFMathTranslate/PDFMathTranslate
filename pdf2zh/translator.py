@@ -422,6 +422,7 @@ class OpenAITranslator(BaseTranslator):
             model = self.envs["OPENAI_MODEL"]
         super().__init__(lang_in, lang_out, model, ignore_cache)
         self.options = {"temperature": 0}  # 随机采样可能会打断公式标记
+        self.extra_options = {}
         self.client = openai.OpenAI(
             base_url=base_url or self.envs["OPENAI_BASE_URL"],
             api_key=api_key or self.envs["OPENAI_API_KEY"],
@@ -446,6 +447,7 @@ class OpenAITranslator(BaseTranslator):
         response = self.client.chat.completions.create(
             model=self.model,
             **self.options,
+            **self.extra_options,
             messages=self.prompt(text, self.prompttext),
         )
         if not response.choices:
@@ -679,6 +681,13 @@ class GeminiTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
+        self.extra_options = {
+            "extra_body": {
+                "google": {
+                    "thinking_config": {"thinking_level": "low"},
+                },
+            },
+        }
         self.prompttext = prompt
         self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
 
@@ -719,10 +728,15 @@ class GeminiBatchTranslator(BaseTranslator):
     def do_translate(self, text) -> str:
         """Single text translation via google-genai SDK"""
         messages = self.prompt(text, self.prompttext)
+        from google.genai import types
+
         response = self.client.models.generate_content(
             model=self.model,
             contents=messages[0]["content"],
-            config={"temperature": 0},
+            config={
+                "temperature": 0,
+                "thinking_config": types.ThinkingConfig(thinking_level="LOW"),
+            },
         )
         content = response.text.strip()
         content = self.think_filter_regex.sub("", content).strip()
@@ -777,6 +791,9 @@ class GeminiBatchTranslator(BaseTranslator):
                             "role": "user",
                         }
                     ],
+                    "generationConfig": {
+                        "thinkingConfig": {"thinkingLevel": "LOW"},
+                    },
                 }
             )
 

@@ -180,9 +180,9 @@ class TranslateConverter(PDFConverterEx):
                 self.translator = translator(lang_in, lang_out, service_model, envs=envs, prompt=prompt, ignore_cache=ignore_cache)
         if not self.translator:
             raise ValueError("Unsupported translation service")
-        # Enable batch mode for translators that support batch API
-        if hasattr(self.translator, 'translate_batch'):
-            self.batch_mode = True
+        # Always use deferred mode: Phase A for all pages first,
+        # then bulk translate + Phase C (works with all translators)
+        self.batch_mode = True
 
     def _collect_source_page_data(self, ltpage, sstk, pstk, var):
         """Collect Phase A output (source text + layout) for source.json."""
@@ -426,9 +426,9 @@ class TranslateConverter(PDFConverterEx):
         if not self._pending_pages:
             return
 
-        # 1. Batch translate all texts (results stored in cache)
+        # 1. Translate all texts (deduped, cache-aware)
         all_texts = self.get_collected_texts()
-        if all_texts and hasattr(self.translator, "translate_batch"):
+        if all_texts:
             missing_texts = []
             seen = set()
             for text in all_texts:
@@ -439,7 +439,17 @@ class TranslateConverter(PDFConverterEx):
                     continue
                 missing_texts.append(text)
             if missing_texts:
-                self.translator.translate_batch(missing_texts)
+                if hasattr(self.translator, "translate_batch"):
+                    self.translator.translate_batch(missing_texts)
+                else:
+                    log.info(f"Translating {len(missing_texts)} unique texts in parallel")
+                    def _translate_one(text):
+                        result = self.translator.translate(text)
+                        self.translations[text] = result
+                    with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=self.thread
+                    ) as executor:
+                        list(executor.map(_translate_one, missing_texts))
 
         # 2. Process each pending page (Phase B + C)
         original_fontmap = self.fontmap
