@@ -681,13 +681,7 @@ class GeminiTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.extra_options = {
-            "extra_body": {
-                "google": {
-                    "thinking_config": {"thinking_level": "low"},
-                },
-            },
-        }
+        self.extra_options = {"reasoning_effort": "low"}
         self.prompttext = prompt
         self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
 
