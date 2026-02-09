@@ -94,6 +94,7 @@ def _pages_signature(pages: Optional[list[int]]) -> str:
     return "_".join(ranges)
 
 
+
 def _content_fingerprint(data: bytes) -> str:
     return hashlib.sha1(data).hexdigest()[:10]
 
@@ -168,6 +169,7 @@ def translate_patch(
     ignore_cache: bool = False,
     source_data_path: str = None,
     translated_data_path: str = None,
+    source_pages_dir: str = None,
     page_artifacts_dir: str = None,
     translation_file: str = None,
     **kwarg: Any,
@@ -261,6 +263,22 @@ def translate_patch(
         _atomic_write_json(Path(source_data_path), source_data)
         logger.info(f"Source data saved to: {source_data_path}")
 
+    if source_pages_dir:
+        src_dir = Path(source_pages_dir)
+        src_dir.mkdir(parents=True, exist_ok=True)
+        for page in device.page_data:
+            page_number = int(page.get("page_number", 0))
+            page_file = src_dir / f"{page_number + 1:04d}.json"
+            if page_file.exists():
+                continue
+            source_payload = {
+                "page_number": page_number,
+                "paragraphs": page.get("paragraphs", []),
+                "formulas": page.get("formulas", []),
+            }
+            _atomic_write_json(page_file, source_payload)
+        logger.info(f"Source pages saved to: {source_pages_dir}")
+
     # Batch mode: translate all collected texts and typeset deferred pages
     if device.batch_mode:
         device.flush_batch(obj_patch)
@@ -318,6 +336,7 @@ def translate_stream(
     ignore_cache: bool = False,
     source_data_path: str = None,
     translated_data_path: str = None,
+    source_pages_dir: str = None,
     page_artifacts_dir: str = None,
     translation_file: str = None,
     **kwarg: Any,
@@ -576,6 +595,7 @@ def translate(
         pdf_root_dir = artifacts_dir / "pdf"
         run_name = f"{run_id}__{run_stamp}"
         run_dir = json_root_dir / run_name
+        source_pages_dir = str(artifacts_dir / "source" / "pages")
         page_artifacts_dir = str(run_dir / "pages")
         source_data_path = None
         translated_data_path = None
@@ -602,10 +622,11 @@ def translate(
             "service": service,
             "created_at": datetime.strptime(run_stamp, "%Y%m%d-%H%M%S-%f").isoformat(timespec="seconds"),
             "outputs": {
-                "mono_pdf": f"../pdf/{file_mono.name}",
-                "dual_pdf": f"../pdf/{file_dual.name}",
+                "mono_pdf": f"../../pdf/{file_mono.name}",
+                "dual_pdf": f"../../pdf/{file_dual.name}",
             },
             "artifacts": {
+                "source_pages_dir": "../../source/pages",
                 "pages_dir": "pages",
             },
         }
