@@ -452,7 +452,8 @@ class OpenAITranslator(BaseTranslator):
                 f"Please set the appropriate API key in the configuration or environment variables."
             )
         self.client = openai.OpenAI(
-            base_url=base_url or self.envs.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            base_url=base_url
+            or self.envs.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             api_key=resolved_api_key,
         )
         self.prompttext = prompt

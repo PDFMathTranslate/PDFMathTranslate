@@ -45,13 +45,31 @@ from pdf2zh.translator import (
 )
 
 _TRANSLATOR_CLASSES = [
-    GoogleTranslator, BingTranslator, DeepLTranslator, DeepLXTranslator,
-    OllamaTranslator, XinferenceTranslator, AzureOpenAITranslator,
-    OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator,
-    SiliconFlowFreeTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator,
-    AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator,
-    DeepseekTranslator, MiniMaxTranslator, OpenAIlikedTranslator,
-    QwenMtTranslator, X302AITranslator,
+    GoogleTranslator,
+    BingTranslator,
+    DeepLTranslator,
+    DeepLXTranslator,
+    OllamaTranslator,
+    XinferenceTranslator,
+    AzureOpenAITranslator,
+    OpenAITranslator,
+    ZhipuTranslator,
+    ModelScopeTranslator,
+    SiliconTranslator,
+    SiliconFlowFreeTranslator,
+    GeminiTranslator,
+    AzureTranslator,
+    TencentTranslator,
+    DifyTranslator,
+    AnythingLLMTranslator,
+    ArgosTranslator,
+    GrokTranslator,
+    GroqTranslator,
+    DeepseekTranslator,
+    MiniMaxTranslator,
+    OpenAIlikedTranslator,
+    QwenMtTranslator,
+    X302AITranslator,
 ]
 TRANSLATOR_BY_NAME = {cls.name: cls for cls in _TRANSLATOR_CLASSES}
 

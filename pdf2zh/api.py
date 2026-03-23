@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 # Auth
 # ---------------------------------------------------------------------------
 
+
 def require_auth(token: str):
     """Decorator factory that validates Bearer token."""
 
@@ -46,6 +47,7 @@ def require_auth(token: str):
 # ---------------------------------------------------------------------------
 # Job model
 # ---------------------------------------------------------------------------
+
 
 class JobStatus(str, Enum):
     PENDING = "pending"
@@ -88,6 +90,7 @@ class Job:
 # ---------------------------------------------------------------------------
 # Job manager
 # ---------------------------------------------------------------------------
+
 
 class JobManager:
     def __init__(self):
@@ -141,6 +144,7 @@ class JobManager:
 # ---------------------------------------------------------------------------
 # Translation worker
 # ---------------------------------------------------------------------------
+
 
 def _run_translation(job: Job, model):
     import tqdm
@@ -214,6 +218,7 @@ def _run_translation(job: Job, model):
 # System resource helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_cpu_info() -> dict:
     """Return CPU usage and memory stats."""
     import platform
@@ -253,14 +258,18 @@ def _get_gpu_info() -> list:
                 name = name.decode()
             mem = pynvml.nvmlDeviceGetMemoryInfo(h)
             util = pynvml.nvmlDeviceGetUtilizationRates(h)
-            gpus.append({
-                "index": i,
-                "name": name,
-                "gpu_util_percent": util.gpu,
-                "memory_total_mb": round(mem.total / 1024 / 1024),
-                "memory_used_mb": round(mem.used / 1024 / 1024),
-                "memory_percent": round(mem.used / mem.total * 100, 1) if mem.total else 0,
-            })
+            gpus.append(
+                {
+                    "index": i,
+                    "name": name,
+                    "gpu_util_percent": util.gpu,
+                    "memory_total_mb": round(mem.total / 1024 / 1024),
+                    "memory_used_mb": round(mem.used / 1024 / 1024),
+                    "memory_percent": (
+                        round(mem.used / mem.total * 100, 1) if mem.total else 0
+                    ),
+                }
+            )
         pynvml.nvmlShutdown()
     except Exception:
         pass
@@ -358,6 +367,7 @@ def _remap_envs(envs: dict | None) -> dict | None:
 # Flask app factory & routes
 # ---------------------------------------------------------------------------
 
+
 def create_api_app(token: Optional[str], model) -> tuple:
     """Create Flask app and JobManager. Returns (app, jobs)."""
     app = Flask("pdf2zh-api")
@@ -428,6 +438,7 @@ def create_api_app(token: Optional[str], model) -> tuple:
 
         # Validate service name against registry
         from pdf2zh.services import SERVICE_BY_NAME
+
         if service not in SERVICE_BY_NAME:
             return jsonify({"error": f"unknown service: {service!r}"}), 400
 
@@ -468,6 +479,7 @@ def create_api_app(token: Optional[str], model) -> tuple:
         # the model passed at server startup.
         try:
             from pdf2zh.kernel.registry import KernelRegistry
+
             kernel = KernelRegistry.get(backend)
             run_model = getattr(kernel, "model", model)
         except Exception:
@@ -499,11 +511,16 @@ def create_api_app(token: Optional[str], model) -> tuple:
         if not job:
             return jsonify({"error": "job not found"}), 404
         if job.status != JobStatus.COMPLETED:
-            return jsonify({"error": "job not completed", "status": job.status.value}), 400
+            return (
+                jsonify({"error": "job not completed", "status": job.status.value}),
+                400,
+            )
         data = job.result_mono if fmt == "mono" else job.result_dual
         if not data:
             return jsonify({"error": "result not available"}), 404
-        basename = job.filename.rsplit(".", 1)[0] if "." in job.filename else job.filename
+        basename = (
+            job.filename.rsplit(".", 1)[0] if "." in job.filename else job.filename
+        )
         return send_file(
             io.BytesIO(data),
             mimetype="application/pdf",
@@ -513,13 +530,15 @@ def create_api_app(token: Optional[str], model) -> tuple:
     @app.route("/v1/status", methods=["GET"])
     @auth
     def health_status():
-        return jsonify({
-            "status": "ok",
-            "active_jobs": jobs.active_count(),
-            "total_jobs": jobs.total_count(),
-            "cpu": _get_cpu_info(),
-            "gpu": _get_gpu_info(),
-        })
+        return jsonify(
+            {
+                "status": "ok",
+                "active_jobs": jobs.active_count(),
+                "total_jobs": jobs.total_count(),
+                "cpu": _get_cpu_info(),
+                "gpu": _get_gpu_info(),
+            }
+        )
 
     @app.route("/v1/list", methods=["GET"])
     @auth
@@ -549,16 +568,18 @@ def create_api_app(token: Optional[str], model) -> tuple:
 
         fast = LegacyKernel()
         precise = PreciseKernel()
-        return jsonify({
-            "version": fast.version,
-            "backends": {
-                "fast": {"version": fast.version, "available": fast.is_available()},
-                "precise": {
-                    "version": precise.version if precise.is_available() else None,
-                    "available": precise.is_available(),
+        return jsonify(
+            {
+                "version": fast.version,
+                "backends": {
+                    "fast": {"version": fast.version, "available": fast.is_available()},
+                    "precise": {
+                        "version": precise.version if precise.is_available() else None,
+                        "available": precise.is_available(),
+                    },
                 },
-            },
-        })
+            }
+        )
 
     @app.route("/v1/config", methods=["GET"])
     def get_config():
@@ -568,32 +589,38 @@ def create_api_app(token: Optional[str], model) -> tuple:
 
         fast = LegacyKernel()
         precise = PreciseKernel()
-        return jsonify({
-            "services": [
-                {"display": s.display, "value": s.name, "custom_prompt": s.custom_prompt}
-                for s in SERVICES
-            ],
-            "languages": {
-                "Simplified Chinese": "zh",
-                "Traditional Chinese": "zh-TW",
-                "English": "en",
-                "French": "fr",
-                "German": "de",
-                "Japanese": "ja",
-                "Korean": "ko",
-                "Russian": "ru",
-                "Spanish": "es",
-                "Italian": "it",
-            },
-            "backends": {
-                "fast": {"available": fast.is_available(), "version": fast.version},
-                "precise": {
-                    "available": precise.is_available(),
-                    "version": precise.version if precise.is_available() else None,
+        return jsonify(
+            {
+                "services": [
+                    {
+                        "display": s.display,
+                        "value": s.name,
+                        "custom_prompt": s.custom_prompt,
+                    }
+                    for s in SERVICES
+                ],
+                "languages": {
+                    "Simplified Chinese": "zh",
+                    "Traditional Chinese": "zh-TW",
+                    "English": "en",
+                    "French": "fr",
+                    "German": "de",
+                    "Japanese": "ja",
+                    "Korean": "ko",
+                    "Russian": "ru",
+                    "Spanish": "es",
+                    "Italian": "it",
                 },
-            },
-            "default_backend": "fast",
-        })
+                "backends": {
+                    "fast": {"available": fast.is_available(), "version": fast.version},
+                    "precise": {
+                        "available": precise.is_available(),
+                        "version": precise.version if precise.is_available() else None,
+                    },
+                },
+                "default_backend": "fast",
+            }
+        )
 
     return app, jobs
 
@@ -601,6 +628,7 @@ def create_api_app(token: Optional[str], model) -> tuple:
 # ---------------------------------------------------------------------------
 # Server entry point
 # ---------------------------------------------------------------------------
+
 
 def run_api_server(
     host: str = "127.0.0.1",

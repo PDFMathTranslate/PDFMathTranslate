@@ -246,9 +246,7 @@ class TestJobCancellation(unittest.TestCase):
 
         job = self.jobs.create("test.pdf", {})
         job.status = JobStatus.COMPLETED
-        resp = self.client.post(
-            f"/v1/translate/{job.id}/stop", headers=_auth_header()
-        )
+        resp = self.client.post(f"/v1/translate/{job.id}/stop", headers=_auth_header())
         self.assertEqual(resp.status_code, 400)
         self.assertIn("not running", resp.get_json()["error"])
 
@@ -257,9 +255,7 @@ class TestJobCancellation(unittest.TestCase):
 
         job = self.jobs.create("test.pdf", {})
         job.status = JobStatus.RUNNING
-        resp = self.client.post(
-            f"/v1/translate/{job.id}/stop", headers=_auth_header()
-        )
+        resp = self.client.post(f"/v1/translate/{job.id}/stop", headers=_auth_header())
         self.assertEqual(resp.status_code, 200)
         self.assertIn("cancellation requested", resp.get_json()["message"])
         self.assertTrue(job.cancel_event.is_set())
