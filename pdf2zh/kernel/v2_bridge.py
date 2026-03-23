@@ -24,6 +24,7 @@ SERVICE_NAME_MAP: dict[str, str] = {
     "zhipu": "zhipu",
     "silicon": "siliconflow",
     "siliconflow": "siliconflow",
+    "siliconflowfree": "siliconflowfree",
     "gemini": "gemini",
     "tencent": "tencent",
     "dify": "dify",

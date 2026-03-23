@@ -44,6 +44,9 @@ backend = [
     "celery",
     "redis"
 ]
+api = [
+    "flask",
+]
 argostranslate = [
     "argostranslate"
 ]
@@ -57,6 +60,7 @@ dml = [
     "onnxruntime-directml",
 ]
 precise = []  # marker — run `pdf2zh-setup-precise` after install to provision the isolated venv
+vue = []  # marker — submodule provides pre-built Vue static files
 
 [dependency-groups]
 dev = [
@@ -74,6 +78,13 @@ Homepage = "https://github.com/Byaidu/PDFMathTranslate"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.hooks.custom]
+path = "script/hatch_build.py"
+
+[tool.hatch.build]
+# Include Vue static files (built by the custom hook) in the wheel
+artifacts = ["pdf2zh/static/**"]
 
 [project.scripts]
 pdf2zh = "pdf2zh.pdf2zh:main"

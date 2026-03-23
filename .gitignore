@@ -1,3 +1,7 @@
+# AI
+.claude
+.superpowers/*
+
 # Experimental kernel files
 *.csv
 pdf2zh/kernel/PDFMathTranslate-next.git/*.csv
@@ -178,3 +182,6 @@ cython_debug/
 uv.lock
 *.pdf
 *.docx
+
+# Vue GUI build artifact (generated from submodule dist)
+pdf2zh/static/

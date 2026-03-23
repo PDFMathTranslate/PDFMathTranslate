@@ -36,12 +36,24 @@ from pdf2zh.translator import (
     OpenAIlikedTranslator,
     OpenAITranslator,
     QwenMtTranslator,
+    SiliconFlowFreeTranslator,
     SiliconTranslator,
     TencentTranslator,
     XinferenceTranslator,
     ZhipuTranslator,
     X302AITranslator,
 )
+
+_TRANSLATOR_CLASSES = [
+    GoogleTranslator, BingTranslator, DeepLTranslator, DeepLXTranslator,
+    OllamaTranslator, XinferenceTranslator, AzureOpenAITranslator,
+    OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator,
+    SiliconFlowFreeTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator,
+    AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator,
+    DeepseekTranslator, MiniMaxTranslator, OpenAIlikedTranslator,
+    QwenMtTranslator, X302AITranslator,
+]
+TRANSLATOR_BY_NAME = {cls.name: cls for cls in _TRANSLATOR_CLASSES}
 
 log = logging.getLogger(__name__)
 
@@ -155,17 +167,17 @@ class TranslateConverter(PDFConverterEx):
         self.noto = noto
         self.translator: BaseTranslator = None
         # e.g. "ollama:gemma2:9b" -> ["ollama", "gemma2:9b"]
+        if not service:
+            service = "google"
         param = service.split(":", 1)
         service_name = param[0]
         service_model = param[1] if len(param) > 1 else None
         if not envs:
             envs = {}
-        for translator in [GoogleTranslator, BingTranslator, DeepLTranslator, DeepLXTranslator, OllamaTranslator, XinferenceTranslator, AzureOpenAITranslator,
-                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, MiniMaxTranslator, OpenAIlikedTranslator, QwenMtTranslator, X302AITranslator]:
-            if service_name == translator.name:
-                self.translator = translator(lang_in, lang_out, service_model, envs=envs, prompt=prompt, ignore_cache=ignore_cache)
-        if not self.translator:
-            raise ValueError("Unsupported translation service")
+        translator_cls = TRANSLATOR_BY_NAME.get(service_name)
+        if translator_cls is None:
+            raise ValueError(f"Unsupported translation service: {service_name!r}")
+        self.translator = translator_cls(lang_in, lang_out, service_model, envs=envs, prompt=prompt, ignore_cache=ignore_cache)
 
     def receive_layout(self, ltpage: LTPage):
         # 段落

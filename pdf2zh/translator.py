@@ -182,14 +182,17 @@ class GoogleTranslator(BaseTranslator):
             params={"tl": self.lang_out, "sl": self.lang_in, "q": text},
             headers=self.headers,
         )
+        if response.status_code == 400:
+            return remove_control_characters("IRREPARABLE TRANSLATION ERROR")
+        response.raise_for_status()
         re_result = re.findall(
             r'(?s)class="(?:t0|result-container)">(.*?)<', response.text
         )
-        if response.status_code == 400:
-            result = "IRREPARABLE TRANSLATION ERROR"
-        else:
-            response.raise_for_status()
-            result = html.unescape(re_result[0])
+        if not re_result:
+            raise ValueError(
+                f"Google Translate returned unexpected response (status {response.status_code})"
+            )
+        result = html.unescape(re_result[0])
         return remove_control_characters(result)
 
 
@@ -442,9 +445,15 @@ class OpenAITranslator(BaseTranslator):
             "stop": stop_tokens,
             "max_tokens": max_tokens if max_tokens > 0 else None,
         }
+        resolved_api_key = api_key or self.envs.get("OPENAI_API_KEY")
+        if not resolved_api_key:
+            raise ValueError(
+                f"API key is required for {self.name} translator. "
+                f"Please set the appropriate API key in the configuration or environment variables."
+            )
         self.client = openai.OpenAI(
-            base_url=base_url or self.envs["OPENAI_BASE_URL"],
-            api_key=api_key or self.envs["OPENAI_API_KEY"],
+            base_url=base_url or self.envs.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            api_key=resolved_api_key,
         )
         self.prompttext = prompt
         self.add_cache_impact_parameters("temperature", self.options["temperature"])
@@ -656,6 +665,43 @@ class SiliconTranslator(OpenAITranslator):
         )
         self.prompttext = prompt
         self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+
+
+class SiliconFlowFreeTranslator(BaseTranslator):
+    # Free translation proxy provided by pdf2zh-next project
+    name = "siliconflowfree"
+    envs = {}
+    CustomPrompt = True
+
+    ENDPOINTS = [
+        "https://api1.pdf2zh-next.com/chatproxy",
+        "https://api2.pdf2zh-next.com/chatproxy",
+    ]
+
+    def __init__(
+        self, lang_in, lang_out, model, envs=None, prompt=None, ignore_cache=False
+    ):
+        super().__init__(lang_in, lang_out, model, ignore_cache=ignore_cache)
+        self.endpoint = self.ENDPOINTS[0]
+        self.prompttext = prompt
+
+    def do_translate(self, text) -> str:
+        prompt_text = (
+            f"You are a professional,authentic machine translation engine.\n\n"
+            f";; Treat next line as plain text input and translate it into "
+            f"{self.lang_out}, output translation ONLY. If translation is "
+            f"unnecessary (e.g. proper nouns, codes, {{{{1}}}}, etc.), return "
+            f"the original text. NO explanations. NO notes. Input:\n\n{text}"
+        )
+        response = requests.post(
+            self.endpoint,
+            json={"text": prompt_text},
+            timeout=100,
+        )
+        if response.status_code == 429:
+            raise Exception("Rate limited by SiliconFlow Free proxy")
+        response.raise_for_status()
+        return response.json()["content"].strip()
 
 
 class X302AITranslator(OpenAITranslator):

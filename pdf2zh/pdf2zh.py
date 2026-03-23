@@ -100,15 +100,23 @@ def create_parser() -> argparse.ArgumentParser:
         help="The number of threads to execute translation.",
     )
     parse_params.add_argument(
+        "--gui",
+        nargs="?",
+        const="vue",
+        default=None,
+        choices=["vue", "legacy"],
+        help="Launch GUI. Default: Vue. Use '--gui legacy' for Gradio.",
+    )
+    parse_params.add_argument(
         "--interactive",
         "-i",
         action="store_true",
-        help="Interact with GUI.",
+        help="Launch Vue GUI (alias for --gui).",
     )
     parse_params.add_argument(
         "--share",
         action="store_true",
-        help="Enable Gradio Share",
+        help="Enable Gradio Share (only with --gui legacy).",
     )
     parse_params.add_argument(
         "--flask",
@@ -124,7 +132,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--authorized",
         type=str,
         nargs="+",
-        help="user name and password.",
+        help="user name and password (only with --gui legacy).",
     )
     parse_params.add_argument(
         "--prompt",
@@ -208,6 +216,30 @@ def create_parser() -> argparse.ArgumentParser:
         "--sse", action="store_true", help="Launch pdf2zh MCP server in SSE mode"
     )
 
+    parse_params.add_argument(
+        "--api",
+        action="store_true",
+        help="Start lightweight REST API server (no Redis/Celery required).",
+    )
+    parse_params.add_argument(
+        "--api-host",
+        type=str,
+        default="127.0.0.1",
+        help="API server bind address (default: 127.0.0.1).",
+    )
+    parse_params.add_argument(
+        "--api-port",
+        type=int,
+        default=8787,
+        help="API server port (default: 8787).",
+    )
+    parse_params.add_argument(
+        "--api-token",
+        type=str,
+        default=None,
+        help="API bearer token. If not set, a random token is generated at startup.",
+    )
+
     return parser
 
 
@@ -286,7 +318,21 @@ def main(args: Optional[List[str]] = None) -> int:
     else:
         ModelInstance.value = OnnxModel.load_available()
 
-    if parsed_args.interactive:
+    # Resolve GUI mode: --gui [vue|legacy] or -i (alias for --gui vue)
+    gui_mode = parsed_args.gui
+    if parsed_args.interactive and gui_mode is None:
+        gui_mode = "vue"
+
+    if gui_mode == "vue":
+        from pdf2zh.gui_vue import launch_vue_gui
+
+        launch_vue_gui(
+            host=parsed_args.api_host,
+            port=parsed_args.api_port,
+            model=ModelInstance.value,
+        )
+        return 0
+    elif gui_mode == "legacy":
         from pdf2zh.gui import setup_gui
 
         if parsed_args.serverport:
@@ -329,6 +375,17 @@ def main(args: Optional[List[str]] = None) -> int:
             uvicorn.run(starlette_app)
             return 0
         mcp.run()
+        return 0
+
+    if parsed_args.api:
+        from pdf2zh.api import run_api_server
+
+        run_api_server(
+            host=parsed_args.api_host,
+            port=parsed_args.api_port,
+            token=parsed_args.api_token,
+            model=ModelInstance.value,
+        )
         return 0
 
     print(parsed_args)
