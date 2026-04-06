@@ -161,7 +161,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup uv with Python ${{ env.WIN_EXE_PYTHON_VERSION }}
-        uses: astral-sh/setup-uv@85856786d1ce8acfbcc2f13a5f3fbd6b938f9f41 # v7.1.2
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           python-version: ${{ env.WIN_EXE_PYTHON_VERSION }}
           enable-cache: true
@@ -276,7 +276,7 @@ jobs:
           if-no-files-found: error
 
       - name: Setup uv with Python ${{ env.WIN_EXE_PYTHON_VERSION }}
-        uses: astral-sh/setup-uv@85856786d1ce8acfbcc2f13a5f3fbd6b938f9f41 # v7.1.2
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           python-version: ${{ env.WIN_EXE_PYTHON_VERSION }}
           enable-cache: true
