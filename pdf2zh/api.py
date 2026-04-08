@@ -23,6 +23,41 @@ from flask import Flask, request, jsonify, send_file
 logger = logging.getLogger(__name__)
 
 
+class _StatusFilter(logging.Filter):
+    """Suppress noisy werkzeug INFO access logs unless debug is enabled."""
+
+    def __init__(self, debug: bool):
+        super().__init__()
+        self.debug = debug
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if self.debug:
+            return True
+        if record.name.startswith("status") and record.levelno < logging.WARNING:
+            return False
+        if record.name.startswith("v1/translate") and record.levelno < logging.WARNING:
+            return False
+        if record.name.startswith(" 200 -") and record.levelno < logging.WARNING:
+            return False
+        return True
+
+
+def _configure_request_logging(debug: bool) -> None:
+    """Configure request/access logging visibility for Flask dev server."""
+    # Direct logger-level guard for werkzeug loggers.
+    for name in ("werkzeug", "werkzeug.serving"):
+        logging.getLogger(name).setLevel(logging.INFO if debug else logging.WARNING)
+
+    # Defensive handler filter: even if werkzeug resets its level internally,
+    # low-level access logs remain muted unless debug is explicitly enabled.
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        if getattr(handler, "_pdf2zh_status_filter_attached", False):
+            continue
+        handler.addFilter(_StatusFilter(debug=debug))
+        handler._pdf2zh_status_filter_attached = True
+
+
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
@@ -73,6 +108,8 @@ class Job:
     cancel_event: Optional[threading.Event] = field(default=None, repr=False)
 
     def to_dict(self) -> dict:
+        has_mono_result = self.result_mono is not None
+        has_dual_result = self.result_dual is not None
         return {
             "id": self.id,
             "status": self.status.value,
@@ -83,7 +120,9 @@ class Job:
             },
             "error": self.error,
             "created_at": self.created_at,
-            "has_result": self.result_mono is not None,
+            "has_result": has_mono_result or has_dual_result,
+            "has_mono_result": has_mono_result,
+            "has_dual_result": has_dual_result,
         }
 
 
@@ -148,6 +187,8 @@ class JobManager:
 
 def _run_translation(job: Job, model):
     import tqdm
+    import tempfile
+    from pathlib import Path
     from pdf2zh.high_level import translate_stream
 
     def progress_callback(t: tqdm.tqdm):
@@ -157,8 +198,9 @@ def _run_translation(job: Job, model):
     try:
         job.status = JobStatus.RUNNING
         params = job.params
+        backend = (params.get("backend") or "fast").strip()
 
-        logger.info(
+        logger.debug(
             "Job %s starting with params: lang_in=%r, lang_out=%r, service=%r, pages=%r, thread=%r",
             job.id,
             params.get("lang_in"),
@@ -172,28 +214,108 @@ def _run_translation(job: Job, model):
         if prompt:
             prompt = Template(prompt)
 
-        doc_mono, doc_dual = translate_stream(
-            stream=params["stream"],
-            pages=params.get("pages"),
-            lang_in=params.get("lang_in", ""),
-            lang_out=params.get("lang_out", ""),
-            service=params.get("service", ""),
-            thread=params.get("thread", 4),
-            vfont=params.get("vfont", ""),
-            vchar=params.get("vchar", ""),
-            callback=progress_callback,
-            cancellation_event=job.cancel_event,
-            model=model,
-            envs=params.get("envs"),
-            prompt=prompt,
-            skip_subset_fonts=params.get("skip_subset_fonts", False),
-            ignore_cache=params.get("ignore_cache", False),
-        )
+        if backend == "precise":
+            # Use the v2/pdf2zh_next pipeline via the PreciseKernel subprocess.
+            from pdf2zh.kernel.registry import KernelRegistry
+            from pdf2zh.kernel.protocol import TranslateRequest
+
+            kernel = KernelRegistry.get("precise")
+
+            def v2_progress_callback(event: dict):
+                # Best-effort progress bridging.
+                # Prefer overall_progress (0..1 or 0..100), then fallback to
+                # stage_current/stage_total or stage_progress.
+                overall = event.get("overall_progress")
+                pct: int | None = None
+                if isinstance(overall, (int, float)):
+                    pct = int(overall * 100) if overall <= 1.0 else int(overall)
+                else:
+                    stage_current = event.get("stage_current")
+                    stage_total = event.get("stage_total")
+                    stage_progress = event.get("stage_progress")
+                    if (
+                        isinstance(stage_current, (int, float))
+                        and isinstance(stage_total, (int, float))
+                        and stage_total > 0
+                    ):
+                        pct = int((stage_current / stage_total) * 100)
+                    elif isinstance(stage_progress, (int, float)):
+                        pct = int(stage_progress if stage_progress > 1.0 else stage_progress * 100)
+                if pct is None:
+                    return
+                job.progress_current = max(0, min(100, pct))
+                job.progress_total = 100
+
+            # Persist upload bytes to a temp file for pdf2zh_next.
+            with tempfile.TemporaryDirectory(prefix="pdf2zh-api-") as td:
+                td_path = Path(td)
+                input_path = td_path / "input.pdf"
+                input_path.write_bytes(params["stream"])
+
+                out_dir = td_path / "out"
+                out_dir.mkdir(parents=True, exist_ok=True)
+
+                req = TranslateRequest(
+                    files=[str(input_path)],
+                    output=str(out_dir),
+                    pages=params.get("pages"),
+                    lang_in=params.get("lang_in", ""),
+                    lang_out=params.get("lang_out", ""),
+                    service=params.get("service", ""),
+                    thread=params.get("thread", 4),
+                    vfont=params.get("vfont", ""),
+                    vchar=params.get("vchar", ""),
+                    envs=params.get("envs") or {},
+                    prompt=(
+                        prompt.template
+                        if prompt is not None and hasattr(prompt, "template")
+                        else (prompt if isinstance(prompt, str) else None)
+                    ),
+                    skip_subset_fonts=params.get("skip_subset_fonts", False),
+                    ignore_cache=params.get("ignore_cache", False),
+                )
+
+                results = kernel.translate(
+                    req, callback=v2_progress_callback, cancellation_event=job.cancel_event
+                )
+                if not results:
+                    raise RuntimeError("Precise kernel returned no results")
+
+                mono_path = results[0].mono_pdf
+                dual_path = results[0].dual_pdf
+                doc_mono = Path(mono_path).read_bytes() if mono_path else None
+                doc_dual = Path(dual_path).read_bytes() if dual_path else None
+        else:
+            # Default: fast in-process pipeline.
+            doc_mono, doc_dual = translate_stream(
+                stream=params["stream"],
+                pages=params.get("pages"),
+                lang_in=params.get("lang_in", ""),
+                lang_out=params.get("lang_out", ""),
+                service=params.get("service", ""),
+                thread=params.get("thread", 4),
+                vfont=params.get("vfont", ""),
+                vchar=params.get("vchar", ""),
+                callback=progress_callback,
+                cancellation_event=job.cancel_event,
+                model=model,
+                envs=params.get("envs"),
+                prompt=prompt,
+                skip_subset_fonts=params.get("skip_subset_fonts", False),
+                ignore_cache=params.get("ignore_cache", False),
+            )
 
         if job.cancel_event.is_set():
             job.status = JobStatus.CANCELLED
         else:
-            logger.info(
+            # Some pipelines don't emit a final "100%" progress event.
+            # Ensure the API reports completion deterministically.
+            if job.progress_total and job.progress_total > 0:
+                job.progress_current = job.progress_total
+            else:
+                job.progress_current = 100
+                job.progress_total = 100
+            logger.debug(
                 "Job %s finished: mono=%d bytes, dual=%d bytes, input=%d bytes",
                 job.id,
                 len(doc_mono) if doc_mono else 0,
@@ -351,14 +473,29 @@ _ENV_KEY_MAP: dict[str, str] = {
     "claude_code_model": "CLAUDE_CODE_MODEL",
 }
 
+_ENV_KEY_MAP_PRECISE: dict[str, str] = {
+    # Most env keys match, but some providers use different naming in pdf2zh_next.
+    **_ENV_KEY_MAP,
+    # SiliconFlow (v2 expects SILICONFLOW_* keys)
+    "siliconflow_api_key": "SILICONFLOW_API_KEY",
+    "siliconflow_model": "SILICONFLOW_MODEL",
+    # Tencent (v2 expects TENCENT_* keys)
+    "tencentcloud_secret_id": "TENCENT_SECRET_ID",
+    "tencentcloud_secret_key": "TENCENT_SECRET_KEY",
+    # AnythingLLM (v2 expects ANYTHINGLLM_* keys)
+    "anythingllm_apikey": "ANYTHINGLLM_API_KEY",
+    "anythingllm_url": "ANYTHINGLLM_API_URL",
+}
 
-def _remap_envs(envs: dict | None) -> dict | None:
+
+def _remap_envs(envs: dict | None, *, backend: str) -> dict | None:
     """Remap frontend env key names to backend translator env key names."""
     if not envs:
         return envs
     remapped = {}
+    key_map = _ENV_KEY_MAP_PRECISE if backend == "precise" else _ENV_KEY_MAP
     for k, v in envs.items():
-        backend_key = _ENV_KEY_MAP.get(k, k)
+        backend_key = key_map.get(k, k)
         remapped[backend_key] = v
     return remapped
 
@@ -466,7 +603,7 @@ def create_api_app(token: Optional[str], model) -> tuple:
             "thread": raw_thread,
             "vfont": _val("vfont", ""),
             "vchar": _val("vchar", ""),
-            "envs": _remap_envs(data.get("envs")),
+            "envs": _remap_envs(data.get("envs"), backend=backend),
             "prompt": _val("prompt", None),
             "skip_subset_fonts": data.get("skip_subset_fonts", False),
             "ignore_cache": data.get("ignore_cache", False),
@@ -530,6 +667,7 @@ def create_api_app(token: Optional[str], model) -> tuple:
     @app.route("/v1/status", methods=["GET"])
     @auth
     def health_status():
+        logger.debug("Status requested")
         return jsonify(
             {
                 "status": "ok",
@@ -635,7 +773,10 @@ def run_api_server(
     port: int = 8787,
     token: Optional[str] = None,
     model=None,
+    debug: bool = False,
 ):
+    _configure_request_logging(debug)
+
     if token is None:
         token = hashlib.sha1(os.urandom(32)).hexdigest()
         logger.info(f"Generated API token: {token}")
@@ -648,4 +789,4 @@ def run_api_server(
     app, _jobs = create_api_app(token=token, model=model)
     logger.info(f"Starting API server on {host}:{port}")
     print(f"API server listening on http://{host}:{port}")
-    app.run(host=host, port=port, threaded=True)
+    app.run(host=host, port=port, threaded=True, debug=debug)

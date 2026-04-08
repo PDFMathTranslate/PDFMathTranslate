@@ -59,8 +59,8 @@ cuda = [
 dml = [
     "onnxruntime-directml",
 ]
-precise = []  # marker — run `pdf2zh-setup-precise` after install to provision the isolated venv
-vue = []  # marker — submodule provides pre-built Vue static files
+precise = []  # marker — run `pdf2zh-setup-precise` to provision isolated runtime venv
+vue = ["flask"]  # marker — submodule provides pre-built Vue static files
 
 [dependency-groups]
 dev = [

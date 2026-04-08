@@ -1,4 +1,4 @@
-"""Precise kernel adapter — runs pdf2zh_next in an isolated subprocess/venv."""
+"""Precise kernel adapter — runs pip-installed pdf2zh_next in an isolated venv."""
 
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ from pdf2zh.kernel.protocol import TranslateRequest, TranslateResult
 
 logger = logging.getLogger(__name__)
 
-# Resolve paths relative to the kernel package directory
-_SUBMODULE_DIR = Path(__file__).resolve().parent / "PDFMathTranslate-next.git"
-_VENV_DIR = _SUBMODULE_DIR / ".venv"
+# Use a dedicated user cache venv for precise kernel runtime.
+_CACHE_DIR = Path.home() / ".cache" / "pdf2zh"
+_VENV_DIR = _CACHE_DIR / "precise-kernel-venv"
 _WORKER_SCRIPT = Path(__file__).resolve().parent / "v2_worker.py"
 
 
@@ -50,31 +50,18 @@ class PreciseKernel:
                 capture_output=True,
                 text=True,
                 timeout=30,
-                cwd=str(_SUBMODULE_DIR),
             )
             return result.stdout.strip() or "unknown"
         except Exception:
             return "unknown"
 
     def is_available(self) -> bool:
-        """Check if submodule exists and venv is initialized."""
-        return (
-            _SUBMODULE_DIR.is_dir()
-            and (_SUBMODULE_DIR / "pyproject.toml").exists()
-            and Path(_venv_python()).exists()
-        )
+        """Check if venv exists and pdf2zh_next is importable."""
+        return Path(_venv_python()).exists() and self._package_importable()
 
     def ensure_venv(self) -> None:
-        """Create venv and install pdf2zh_next if not already set up."""
-        if (
-            not _SUBMODULE_DIR.is_dir()
-            or not (_SUBMODULE_DIR / "pyproject.toml").exists()
-        ):
-            raise RuntimeError(
-                "PDFMathTranslate-next submodule not found. "
-                "Run: git submodule update --init pdf2zh/kernel/PDFMathTranslate-next.git"
-            )
-
+        """Create venv and install/upgrade pdf2zh_next from pip."""
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
         venv_exists = Path(_venv_python()).exists()
 
         if venv_exists and self._package_importable():
@@ -88,12 +75,18 @@ class PreciseKernel:
                 timeout=60,
             )
 
-        logger.info("Installing pdf2zh_next into venv...")
+        logger.info("Installing/upgrading pdf2zh-next from pip into precise venv...")
         subprocess.run(
-            [_venv_python(), "-m", "pip", "install", "-e", str(_SUBMODULE_DIR)],
+            [
+                _venv_python(),
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                "pdf2zh-next",
+            ],
             check=True,
             timeout=300,
-            cwd=str(_SUBMODULE_DIR),
         )
 
         logger.info("Precise kernel venv ready.")
@@ -105,8 +98,6 @@ class PreciseKernel:
                 [_venv_python(), "-c", "import pdf2zh_next"],
                 capture_output=True,
                 timeout=30,
-                cwd=str(_SUBMODULE_DIR),
-                env={**os.environ, "PYTHONPATH": str(_SUBMODULE_DIR)},
             )
             return result.returncode == 0
         except Exception:
@@ -115,7 +106,6 @@ class PreciseKernel:
     def _build_subprocess_env(self, request: TranslateRequest) -> dict[str, str]:
         """Build environment for the subprocess with PDF2ZH_ prefixed vars."""
         env = os.environ.copy()
-        env["PYTHONPATH"] = str(_SUBMODULE_DIR)
         env.update(request_to_env(request))
         return env
 
@@ -140,7 +130,6 @@ class PreciseKernel:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            cwd=str(_SUBMODULE_DIR),
             env=env,
         )
 
@@ -152,19 +141,20 @@ class PreciseKernel:
             proc.stdin.write(input_json)
             proc.stdin.close()
 
-            for line in proc.stderr:
-                line = line.strip()
-                if not line:
-                    continue
-                stderr_lines.append(line)
+            for raw_line in proc.stderr:
+                line = raw_line.rstrip("\r\n")
+                if line:
+                    stderr_lines.append(line)
                 try:
-                    event = json.loads(line)
+                    event = self._parse_progress_event(line)
                     if not isinstance(event, dict):
                         raise ValueError("not a JSON object")
                     if callback:
                         callback(event)
                 except (json.JSONDecodeError, ValueError):
-                    print(line, file=sys.stderr, flush=True)
+                    # Preserve original v2 formatting (indentation/progress text).
+                    sys.stderr.write(raw_line)
+                    sys.stderr.flush()
 
             stdout = proc.stdout.read()
             proc.wait()
@@ -195,6 +185,22 @@ class PreciseKernel:
             )
         return results
 
+    @staticmethod
+    def _parse_progress_event(line: str) -> dict[str, Any]:
+        """Parse a JSON progress event from possibly mixed stderr output.
+
+        Rich progress rendering may inject control text around event lines.
+        Try full-line JSON first, then extract the JSON object between braces.
+        """
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError:
+            start = line.find("{")
+            end = line.rfind("}")
+            if start == -1 or end == -1 or end <= start:
+                raise
+            return json.loads(line[start : end + 1])
+
     async def translate_async(
         self,
         request: TranslateRequest,
@@ -213,7 +219,6 @@ class PreciseKernel:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=str(_SUBMODULE_DIR),
             env=env,
         )
 

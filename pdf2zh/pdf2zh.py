@@ -385,6 +385,7 @@ def main(args: Optional[List[str]] = None) -> int:
             port=parsed_args.api_port,
             token=parsed_args.api_token,
             model=ModelInstance.value,
+            debug=parsed_args.debug,
         )
         return 0
 

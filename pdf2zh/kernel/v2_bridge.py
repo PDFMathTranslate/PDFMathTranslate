@@ -11,36 +11,39 @@ import dataclasses
 import os
 from typing import Any
 
-# v1 service name → v2 CLI engine flag (lowercase)
+# v1 service name → v2 CLI engine flag.
+# v2 flags are translate_engine_type.lower() with NO hyphens/underscores.
 SERVICE_NAME_MAP: dict[str, str] = {
     "google": "google",
     "bing": "bing",
     "deepl": "deepl",
-    "deeplx": "deeplx",
     "ollama": "ollama",
     "openai": "openai",
     "azure": "azure",
-    "azureopenai": "azure",
+    "azureopenai": "azureopenai",
     "zhipu": "zhipu",
     "silicon": "siliconflow",
     "siliconflow": "siliconflow",
     "siliconflowfree": "siliconflowfree",
     "gemini": "gemini",
-    "tencent": "tencent",
+    "tencent": "tencentmechinetranslation",
     "dify": "dify",
     "anythingllm": "anythingllm",
-    "argos": "argos",
     "grok": "grok",
     "groq": "groq",
     "deepseek": "deepseek",
-    "doubao": "doubao",
-    "openai-compatible": "openai_compatible",
-    "aliyun-dashscope": "aliyun_dashscope",
+    "openai-compatible": "openaicompatible",
+    "aliyun-dashscope": "aliyundashscope",
     "modelscope": "modelscope",
+    "qwen-mt": "qwenmt",
+    "claudecode": "claudecode",
+    "clitranslator": "clitranslator",
 }
 
 # Known engine-related env var names (without PDF2ZH_ prefix).
 # Used to forward relevant vars from os.environ into the subprocess.
+# Names must match the pydantic field names in v2's translate_engine_model.py
+# (ConfigManager reads them as PDF2ZH_{FIELD_NAME_UPPER}).
 _ENGINE_ENV_NAMES: set[str] = {
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
@@ -58,29 +61,32 @@ _ENGINE_ENV_NAMES: set[str] = {
     "OLLAMA_HOST",
     "OLLAMA_MODEL",
     "DEEPL_AUTH_KEY",
-    "DEEPLX_ENDPOINT",
-    "DEEPLX_AUTH_KEY",
-    "TENCENT_SECRET_ID",
-    "TENCENT_SECRET_KEY",
-    "DIFY_API_URL",
-    "DIFY_API_KEY",
-    "ANYTHINGLLM_API_URL",
-    "ANYTHINGLLM_API_KEY",
+    "TENCENTCLOUD_SECRET_ID",
+    "TENCENTCLOUD_SECRET_KEY",
+    "DIFY_URL",
+    "DIFY_APIKEY",
+    "ANYTHINGLLM_URL",
+    "ANYTHINGLLM_APIKEY",
     "GROK_API_KEY",
     "GROK_MODEL",
     "GROQ_API_KEY",
     "GROQ_MODEL",
-    "DOUBAO_API_KEY",
-    "DOUBAO_MODEL",
     "SILICONFLOW_API_KEY",
     "SILICONFLOW_MODEL",
+    "SILICONFLOW_BASE_URL",
     "OPENAI_COMPATIBLE_API_KEY",
     "OPENAI_COMPATIBLE_BASE_URL",
     "OPENAI_COMPATIBLE_MODEL",
     "ALIYUN_DASHSCOPE_API_KEY",
     "ALIYUN_DASHSCOPE_MODEL",
+    "ALIYUN_DASHSCOPE_BASE_URL",
     "MODELSCOPE_API_KEY",
     "MODELSCOPE_MODEL",
+    "QWENMT_API_KEY",
+    "QWENMT_MODEL",
+    "QWENMT_BASE_URL",
+    "CLAUDE_CODE_PATH",
+    "CLAUDE_CODE_MODEL",
 }
 
 
@@ -121,10 +127,10 @@ def request_to_cli_args(request: Any) -> list[str]:
     if data.get("lang_out"):
         args.extend(["--lang-out", data["lang_out"]])
 
-    # Engine flag: --google, --openai, etc.
+    # Engine flag: --google, --openai, --siliconflowfree, etc.
     engine_type = SERVICE_NAME_MAP.get(service.lower())
     if engine_type:
-        args.append(f"--{engine_type.replace('_', '-')}")
+        args.append(f"--{engine_type}")
 
     if pages_v2:
         args.extend(["--pages", pages_v2])

@@ -171,6 +171,8 @@ class TestJobLifecycle(unittest.TestCase):
         _run_translation(job, self.model)
 
         self.assertEqual(job.status, JobStatus.COMPLETED)
+        self.assertEqual(job.progress_current, job.progress_total)
+        self.assertGreater(job.progress_total, 0)
 
         # Check status
         resp = self.client.get(f"/v1/translate/{job.id}", headers=_auth_header())
@@ -178,6 +180,8 @@ class TestJobLifecycle(unittest.TestCase):
         data = resp.get_json()
         self.assertEqual(data["status"], "completed")
         self.assertTrue(data["has_result"])
+        self.assertEqual(data["progress"]["current"], data["progress"]["total"])
+        self.assertGreater(data["progress"]["total"], 0)
 
         # Download mono
         resp = self.client.get(
@@ -217,6 +221,26 @@ class TestJobLifecycle(unittest.TestCase):
             "/v1/translate/nonexistent/download/mono", headers=_auth_header()
         )
         self.assertEqual(resp.status_code, 404)
+
+    def test_dual_only_result_is_reported_as_available(self):
+        from pdf2zh.api import JobStatus
+
+        job = self.jobs.create("test.pdf", {})
+        job.status = JobStatus.COMPLETED
+        job.result_dual = FAKE_DUAL
+
+        resp = self.client.get(f"/v1/translate/{job.id}", headers=_auth_header())
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["has_result"])
+        self.assertFalse(data["has_mono_result"])
+        self.assertTrue(data["has_dual_result"])
+
+        resp = self.client.get(
+            f"/v1/translate/{job.id}/download/dual", headers=_auth_header()
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, FAKE_DUAL)
 
     @patch("pdf2zh.api.threading.Thread")
     @patch("pdf2zh.api._run_translation")
