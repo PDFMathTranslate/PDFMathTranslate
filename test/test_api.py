@@ -222,6 +222,56 @@ class TestJobLifecycle(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 404)
 
+    @patch("pdf2zh.kernel.registry.KernelRegistry.get")
+    def test_precise_job_status_exposes_stage_progress(self, mock_kernel_get):
+        from pdf2zh.api import _run_translation, JobStatus
+        from pdf2zh.kernel.protocol import TranslateResult
+
+        mock_kernel = MagicMock()
+
+        def _fake_translate(_req, callback=None, cancellation_event=None):
+            if callback:
+                callback(
+                    {
+                        "event": "progress_update",
+                        "stage": "layout_analysis",
+                        "stage_progress": 0.25,
+                        "stage_current": 1,
+                        "stage_total": 4,
+                        "overall_progress": 0.5,
+                    }
+                )
+            return [TranslateResult(mono_pdf=None, dual_pdf=None)]
+
+        mock_kernel.translate.side_effect = _fake_translate
+        mock_kernel_get.return_value = mock_kernel
+
+        job = self.jobs.create(
+            "test.pdf",
+            {
+                "stream": FAKE_PDF,
+                "backend": "precise",
+                "service": "siliconflowfree",
+                "lang_in": "en",
+                "lang_out": "zh",
+                "thread": 1,
+            },
+        )
+        _run_translation(job, self.model)
+
+        self.assertEqual(job.status, JobStatus.COMPLETED)
+        resp = self.client.get(f"/v1/translate/{job.id}", headers=_auth_header())
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertIn("stage", data)
+        self.assertEqual(data["stage"]["name"], "layout_analysis")
+        self.assertEqual(data["stage"]["event"], "progress_update")
+        self.assertEqual(data["stage"]["current"], 1)
+        self.assertEqual(data["stage"]["total"], 4)
+        self.assertEqual(data["stage"]["progress"], 25.0)
+        self.assertEqual(data["progress"]["current"], 100)
+        self.assertEqual(data["progress"]["total"], 100)
+
     def test_dual_only_result_is_reported_as_available(self):
         from pdf2zh.api import JobStatus
 

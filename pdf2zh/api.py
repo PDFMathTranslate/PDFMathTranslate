@@ -99,6 +99,11 @@ class Job:
     filename: str = ""
     progress_current: int = 0
     progress_total: int = 0
+    stage_name: str = ""
+    stage_progress: float = 0.0
+    stage_current: int = 0
+    stage_total: int = 0
+    stage_event: str = ""
     error: Optional[str] = None
     result_mono: Optional[bytes] = field(default=None, repr=False)
     result_dual: Optional[bytes] = field(default=None, repr=False)
@@ -117,6 +122,13 @@ class Job:
             "progress": {
                 "current": self.progress_current,
                 "total": self.progress_total,
+            },
+            "stage": {
+                "name": self.stage_name,
+                "progress": self.stage_progress,
+                "current": self.stage_current,
+                "total": self.stage_total,
+                "event": self.stage_event,
             },
             "error": self.error,
             "created_at": self.created_at,
@@ -222,6 +234,31 @@ def _run_translation(job: Job, model):
             kernel = KernelRegistry.get("precise")
 
             def v2_progress_callback(event: dict):
+                stage = event.get("stage")
+                if isinstance(stage, str):
+                    job.stage_name = stage
+                event_type = event.get("event")
+                if isinstance(event_type, str):
+                    job.stage_event = event_type
+
+                stage_progress = event.get("stage_progress")
+                if isinstance(stage_progress, (int, float)):
+                    # Normalize to a stable 0..100 API value.
+                    stage_pct = (
+                        float(stage_progress)
+                        if stage_progress > 1.0
+                        else float(stage_progress) * 100.0
+                    )
+                    job.stage_progress = max(0.0, min(100.0, stage_pct))
+
+                stage_current = event.get("stage_current")
+                if isinstance(stage_current, (int, float)):
+                    job.stage_current = int(stage_current)
+
+                stage_total = event.get("stage_total")
+                if isinstance(stage_total, (int, float)):
+                    job.stage_total = int(stage_total)
+
                 # Best-effort progress bridging.
                 # Prefer overall_progress (0..1 or 0..100), then fallback to
                 # stage_current/stage_total or stage_progress.
