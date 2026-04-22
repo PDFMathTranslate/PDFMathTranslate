@@ -417,6 +417,7 @@ def yadt_main(parsed_args) -> int:
         AzureOpenAITranslator,
         GoogleTranslator,
         BingTranslator,
+        CodexTranslator,
         DeepLTranslator,
         DeepLXTranslator,
         OllamaTranslator,
@@ -461,6 +462,7 @@ def yadt_main(parsed_args) -> int:
         GroqTranslator,
         DeepseekTranslator,
         OpenAIlikedTranslator,
+        CodexTranslator,
         QwenMtTranslator,
         X302AITranslator,
     ]:
