@@ -244,8 +244,18 @@ def translate_stream(
     for id in range(page_count):
         doc_en.move_page(page_count + id, id * 2 + 1)
     if not skip_subset_fonts:
-        doc_zh.subset_fonts(fallback=True)
-        doc_en.subset_fonts(fallback=True)
+        try:
+            doc_zh.subset_fonts(fallback=True)
+        except Exception:
+            logger.warning(
+                "Failed to subset fonts in translated document; output may be larger than expected"
+            )
+        try:
+            doc_en.subset_fonts(fallback=True)
+        except Exception:
+            logger.warning(
+                "Failed to subset fonts in bilingual document; output may be larger than expected"
+            )
     return (
         doc_zh.write(deflate=True, garbage=3, use_objstms=1),
         doc_en.write(deflate=True, garbage=3, use_objstms=1),
