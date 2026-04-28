@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/pdfmathtranslate-pdfmathtranslate-badge.png)](https://mseep.ai/app/pdfmathtranslate-pdfmathtranslate)
+
 <div align="center">
 	<a href="https://go.warp.dev/PDFMathTranslate" target="_blank">
 		<sup>Special thanks to:</sup>
