@@ -157,15 +157,13 @@ class TestOllamaTranslator(unittest.TestCase):
         translator = OllamaTranslator(lang_in="en", lang_out="zh", model="test:3b")
         with mock.patch.object(translator, "client") as mock_client:
             chat_response = mock_client.chat.return_value
-            chat_response.message.content = dedent(
-                """\
+            chat_response.message.content = dedent("""\
                 <think>
                 Thinking...
                 </think>
                     
                 天空呈现蓝色是因为...
-                """
-            )
+                """)
 
             text = "The sky appears blue because of..."
             translated_result = translator.do_translate(text)
@@ -185,14 +183,12 @@ class TestOllamaTranslator(unittest.TestCase):
                 mock_client.chat()
 
     def test_remove_cot_content(self):
-        fake_cot_resp_text = dedent(
-            """\
+        fake_cot_resp_text = dedent("""\
             <think>
 
             </think>
 
-            The sky appears blue because of..."""
-        )
+            The sky appears blue because of...""")
         removed_cot_content = OllamaTranslator._remove_cot_content(fake_cot_resp_text)
         excepted_content = "The sky appears blue because of..."
         self.assertEqual(excepted_content, removed_cot_content.strip())

@@ -48,6 +48,7 @@ log = logging.getLogger(__name__)
 # Pattern to skip: empty strings and formula-only strings like "{v0}"
 _SKIP_TRANSLATE_RE = re.compile(r"^\{v\d+\}$")
 
+
 def _should_skip(s: str) -> bool:
     """Return True if string should not be translated (empty or formula-only)."""
     return not s.strip() or bool(_SKIP_TRANSLATE_RE.match(s))
@@ -62,15 +63,15 @@ class PDFConverterEx(PDFConverter):
 
     def begin_page(self, page, ctm) -> None:
         # 重载替换 cropbox
-        (x0, y0, x1, y1) = page.cropbox
-        (x0, y0) = apply_matrix_pt(ctm, (x0, y0))
-        (x1, y1) = apply_matrix_pt(ctm, (x1, y1))
+        x0, y0, x1, y1 = page.cropbox
+        x0, y0 = apply_matrix_pt(ctm, (x0, y0))
+        x1, y1 = apply_matrix_pt(ctm, (x1, y1))
         mediabox = (0, 0, abs(x0 - x1), abs(y0 - y1))
         self.cur_item = LTPage(page.pageno, mediabox)
 
     def end_page(self, page):
         # 重载返回指令流
-        self._current_page_xref = getattr(page, 'page_xref', None)
+        self._current_page_xref = getattr(page, "page_xref", None)
         return self.receive_layout(self.cur_item)
 
     def begin_figure(self, name, bbox, matrix) -> None:
@@ -168,6 +169,8 @@ class TranslateConverter(PDFConverterEx):
         self.batch_mode = False
         self._pending_pages = []
         self._current_page_xref = None
+        self.fontmap = {}
+        self.fontid = {}
         # e.g. "ollama:gemma2:9b" -> ["ollama", "gemma2:9b"]
         param = service.split(":", 1)
         service_name = param[0]

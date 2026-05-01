@@ -94,7 +94,6 @@ def _pages_signature(pages: Optional[list[int]]) -> str:
     return "_".join(ranges)
 
 
-
 def _content_fingerprint(data: bytes) -> str:
     return hashlib.sha1(data).hexdigest()[:10]
 
@@ -126,8 +125,7 @@ def _load_translation_map(translation_file: str) -> Dict[str, str]:
             if isinstance(loaded.get("translations"), dict):
                 translation_map.update(loaded["translations"])
             elif all(
-                isinstance(k, str) and isinstance(v, str)
-                for k, v in loaded.items()
+                isinstance(k, str) and isinstance(v, str) for k, v in loaded.items()
             ):
                 translation_map.update(loaded)
         if not translation_map:
@@ -620,7 +618,9 @@ def translate(
             "lang_in": lang_in,
             "lang_out": lang_out,
             "service": service,
-            "created_at": datetime.strptime(run_stamp, "%Y%m%d-%H%M%S-%f").isoformat(timespec="seconds"),
+            "created_at": datetime.strptime(run_stamp, "%Y%m%d-%H%M%S-%f").isoformat(
+                timespec="seconds"
+            ),
             "outputs": {
                 "mono_pdf": f"../../pdf/{file_mono.name}",
                 "dual_pdf": f"../../pdf/{file_dual.name}",

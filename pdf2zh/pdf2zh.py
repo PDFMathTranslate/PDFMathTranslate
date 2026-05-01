@@ -194,7 +194,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--translation-file",
         "-tf",
         type=str,
-        help="Use translations from JSON ({\"translations\": {\"source\": \"target\"}}) or page-artifacts directory.",
+        help='Use translations from JSON ({"translations": {"source": "target"}}) or page-artifacts directory.',
     )
 
     parse_params.add_argument(

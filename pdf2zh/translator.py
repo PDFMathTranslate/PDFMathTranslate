@@ -29,7 +29,6 @@ from tenacity import retry, retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -831,9 +830,7 @@ class GeminiBatchTranslator(BaseTranslator):
                 self.cache.set(texts[j], content)
             elif inline_response.error:
                 logger.error(f"Batch item {j} failed: {inline_response.error}")
-                raise Exception(
-                    f"Batch translation error: {inline_response.error}"
-                )
+                raise Exception(f"Batch translation error: {inline_response.error}")
 
     def get_formular_placeholder(self, id: int):
         return "{{v" + str(id) + "}}"
