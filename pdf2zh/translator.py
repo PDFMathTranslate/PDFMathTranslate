@@ -814,10 +814,10 @@ class AnythingLLMTranslator(BaseTranslator):
     CustomPrompt = True
 
     def __init__(
-        self, lang_out, lang_in, model, envs=None, prompt=None, ignore_cache=False
+        self, lang_in, lang_out, model, envs=None, prompt=None, ignore_cache=False
     ):
         self.set_envs(envs)
-        super().__init__(lang_out, lang_in, model, ignore_cache)
+        super().__init__(lang_in, lang_out, model, ignore_cache)
         self.api_url = self.envs["AnythingLLM_URL"]
         self.api_key = self.envs["AnythingLLM_APIKEY"]
         self.headers = {
@@ -853,10 +853,10 @@ class DifyTranslator(BaseTranslator):
     }
 
     def __init__(
-        self, lang_out, lang_in, model, envs=None, ignore_cache=False, **kwargs
+        self, lang_in, lang_out, model, envs=None, ignore_cache=False, **kwargs
     ):
         self.set_envs(envs)
-        super().__init__(lang_out, lang_in, model, ignore_cache)
+        super().__init__(lang_in, lang_out, model, ignore_cache)
         self.api_url = self.envs["DIFY_API_URL"]
         self.api_key = self.envs["DIFY_API_KEY"]
 
@@ -883,8 +883,15 @@ class DifyTranslator(BaseTranslator):
         response.raise_for_status()
         response_data = response.json()
 
-        # 解析响应
-        return response_data.get("answer", "")
+        # 解析响应：兼容 Workflow 格式 (data.outputs.answer) 和 Agent/Chatflow 格式 (answer)
+        # Workflow response: {"data": {"outputs": {"answer": "..."}}}
+        # Agent/Chatflow response: {"answer": "..."}
+        workflow_answer = (
+            response_data.get("data", {}).get("outputs", {}).get("answer")
+        )
+        if workflow_answer is not None:
+            return workflow_answer.strip()
+        return response_data.get("answer", "").strip()
 
 
 class ArgosTranslator(BaseTranslator):
