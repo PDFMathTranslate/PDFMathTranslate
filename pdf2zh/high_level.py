@@ -319,6 +319,7 @@ def translate(
     prompt: Template = None,
     skip_subset_fonts: bool = False,
     ignore_cache: bool = False,
+    source_dir: str = "",
     **kwarg: Any,
 ):
     if not files:
@@ -335,6 +336,7 @@ def translate(
     result_files = []
 
     for file in files:
+        original_file = file
         if type(file) is str and (
             file.startswith("http://") or file.startswith("https://")
         ):
@@ -394,8 +396,14 @@ def translate(
             s_raw,
             **locals(),
         )
-        file_mono = Path(output) / f"{filename}-mono.pdf"
-        file_dual = Path(output) / f"{filename}-dual.pdf"
+        if output and source_dir and not str(original_file).startswith(("http://", "https://")):
+            rel_dir = Path(os.path.relpath(original_file, source_dir)).parent
+            out_subdir = Path(output) / rel_dir
+            out_subdir.mkdir(parents=True, exist_ok=True)
+        else:
+            out_subdir = Path(output)
+        file_mono = out_subdir / f"{filename}-mono.pdf"
+        file_dual = out_subdir / f"{filename}-dual.pdf"
         doc_mono = open(file_mono, "wb")
         doc_dual = open(file_dual, "wb")
         doc_mono.write(s_mono)

@@ -343,8 +343,10 @@ def main(args: Optional[List[str]] = None) -> int:
     KernelRegistry.switch(parsed_args.mode)  # "fast" or "precise"
     kernel = KernelRegistry.get()
 
+    source_dir = ""
     if parsed_args.dir:
-        parsed_args.files = find_all_files_in_directory(parsed_args.files[0])
+        source_dir = os.path.abspath(parsed_args.files[0])
+        parsed_args.files = find_all_files_in_directory(source_dir)
 
     # Extract prompt text (may be a Template object from file reading above)
     prompt_text = None
@@ -371,6 +373,7 @@ def main(args: Optional[List[str]] = None) -> int:
         ignore_cache=parsed_args.ignore_cache,
         compatible=parsed_args.compatible,
         debug=parsed_args.debug,
+        source_dir=source_dir,
     )
     kernel.translate(request)
     return 0

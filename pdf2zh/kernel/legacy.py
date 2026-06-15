@@ -68,6 +68,9 @@ class LegacyKernel:
 
             kwargs["prompt"] = Template(request.prompt)
 
+        if request.source_dir:
+            kwargs["source_dir"] = request.source_dir
+
         result_files = translate(**kwargs)
 
         results = []
