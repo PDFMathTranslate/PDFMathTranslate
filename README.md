@@ -66,7 +66,7 @@ Scientific PDF document translation preserving layouts.
 - [March 22, 2026] Supporting MiniMax (PR by [@octo-patch](https://github.com/octo-patch))
 - [March 22, 2026] Fixing OpenAI-related issues (PR by [@samqin123](https://github.com/samqin123))
 - [March 22, 2026] Fixing HTTP-related issues (PR by [@soukouki](https://github.com/soukouki))
-- [March 22, 2026] Faster model loading on mac and OONX platforms, GUI starting-up, version printing, and continuous integration.(by [@reycn](https://github.com/reycn))
+- [March 22, 2026] Faster model loading on mac and ONNX platforms, GUI starting-up, version printing, and continuous integration.(by [@reycn](https://github.com/reycn))
 - [May 9, 2025] pdf2zh 2.0 Preview Version [#586](https://github.com/Byaidu/PDFMathTranslate/issues/586): The Windows ZIP file and Docker image are now available.
 
   > [!NOTE]
