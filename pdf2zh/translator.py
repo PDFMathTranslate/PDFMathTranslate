@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import re
+import subprocess
+import tempfile
 import unicodedata
 from copy import copy
 from string import Template
@@ -41,6 +43,8 @@ class BaseTranslator:
     envs = {}
     lang_map: dict[str, str] = {}
     CustomPrompt = False
+    batch_size = 1
+    max_concurrency: int | None = None
 
     def __init__(self, lang_in: str, lang_out: str, model: str, ignore_cache: bool):
         lang_in = self.lang_map.get(lang_in.lower(), lang_in)
@@ -100,6 +104,12 @@ class BaseTranslator:
         translation = self.do_translate(text)
         self.cache.set(text, translation)
         return translation
+
+    def translate_batch(
+        self, texts: list[str], ignore_cache: bool = False
+    ) -> list[str]:
+        """Translate a batch while preserving the existing per-item cache contract."""
+        return [self.translate(text, ignore_cache=ignore_cache) for text in texts]
 
     def do_translate(self, text: str) -> str:
         """
@@ -1196,3 +1206,217 @@ class QwenMtTranslator(OpenAITranslator):
             extra_body={"translation_options": translation_options},
         )
         return response.choices[0].message.content.strip()
+
+
+class ClaudeCodeTranslator(BaseTranslator):
+    """Translate with an authenticated local Claude Code CLI session."""
+
+    name = "claude-code"
+    envs = {
+        "CLAUDE_CODE_BIN": "claude",
+        "CLAUDE_CODE_MODEL": "sonnet",
+        "CLAUDE_CODE_TIMEOUT": "120",
+    }
+    CustomPrompt = True
+    batch_size = 8
+    max_batch_chars = 6000
+    max_concurrency = 1
+    placeholder_pattern = re.compile(r"(?:\{v\d+\}|</?b\d+>)")
+
+    single_schema = {
+        "type": "object",
+        "properties": {"translation": {"type": "string"}},
+        "required": ["translation"],
+        "additionalProperties": False,
+    }
+    batch_schema = {
+        "type": "object",
+        "properties": {
+            "translations": {
+                "type": "array",
+                "items": {"type": "string"},
+            }
+        },
+        "required": ["translations"],
+        "additionalProperties": False,
+    }
+
+    def __init__(
+        self, lang_in, lang_out, model, envs=None, prompt=None, ignore_cache=False
+    ):
+        self.set_envs(envs)
+        model = model or self.envs["CLAUDE_CODE_MODEL"]
+        super().__init__(lang_in, lang_out, model, ignore_cache)
+        self.claude_bin = self.envs["CLAUDE_CODE_BIN"] or "claude"
+        self.timeout = self._parse_timeout(self.envs["CLAUDE_CODE_TIMEOUT"])
+        self.prompttext = prompt
+        self.add_cache_impact_parameters("prompt", str(prompt or ""))
+
+    @staticmethod
+    def _parse_timeout(value) -> float:
+        try:
+            timeout = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("CLAUDE_CODE_TIMEOUT must be a positive number") from exc
+        if timeout <= 0:
+            raise ValueError("CLAUDE_CODE_TIMEOUT must be a positive number")
+        return timeout
+
+    def _command(self, schema: dict) -> list[str]:
+        return [
+            self.claude_bin,
+            "-p",
+            "--model",
+            self.model,
+            "--setting-sources",
+            "",
+            "--tools",
+            "",
+            "--no-session-persistence",
+            "--output-format",
+            "json",
+            "--json-schema",
+            json.dumps(schema, separators=(",", ":")),
+        ]
+
+    @retry(
+        retry=retry_if_exception_type(
+            (OSError, subprocess.TimeoutExpired, RuntimeError, ValueError)
+        ),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=4),
+        reraise=True,
+    )
+    def _run_cli(self, prompt: str, schema: dict) -> dict:
+        try:
+            with tempfile.TemporaryDirectory(prefix="pdf2zh-claude-code-") as cwd:
+                completed = subprocess.run(
+                    self._command(schema),
+                    input=prompt,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout,
+                    check=False,
+                    cwd=cwd,
+                )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                f"Claude Code executable not found: {self.claude_bin}"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"Claude Code timed out after {self.timeout:g} seconds"
+            ) from exc
+
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise RuntimeError(
+                f"Claude Code exited with status {completed.returncode}: "
+                f"{detail[:1000]}"
+            )
+
+        try:
+            envelope = json.loads(completed.stdout)
+            output = envelope["structured_output"]
+            if isinstance(output, str):
+                output = json.loads(output)
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise ValueError("Claude Code returned invalid structured output") from exc
+        if not isinstance(output, dict):
+            raise ValueError("Claude Code structured output must be an object")
+        return output
+
+    def _translation_prompt(self, text: str) -> str:
+        instruction = self.prompt(text, self.prompttext)[0]["content"]
+        return (
+            f"{instruction}\n\n"
+            "Return the result through the provided JSON schema. Preserve every "
+            "formula and placeholder token such as {v0}, <b0>, and </b0> exactly."
+        )
+
+    def _validate_translation(self, source: str, translation) -> str:
+        if not isinstance(translation, str) or not translation.strip():
+            raise ValueError("Claude Code returned an empty translation")
+        source_placeholders = sorted(self.placeholder_pattern.findall(source))
+        translated_placeholders = sorted(self.placeholder_pattern.findall(translation))
+        if source_placeholders != translated_placeholders:
+            raise ValueError("Claude Code changed formula or rich-text placeholders")
+        return translation.strip()
+
+    def do_translate(self, text: str) -> str:
+        output = self._run_cli(self._translation_prompt(text), self.single_schema)
+        return self._validate_translation(text, output.get("translation"))
+
+    def _translate_uncached_batch(self, texts: list[str]) -> list[str]:
+        items = [
+            {
+                "index": index,
+                "instruction": self.prompt(text, self.prompttext)[0]["content"],
+            }
+            for index, text in enumerate(texts)
+        ]
+        prompt = (
+            f"Translate all {len(texts)} items below independently. Return exactly "
+            f"{len(texts)} strings in index order through the provided JSON schema. "
+            "Preserve every formula and placeholder token such as {v0}, <b0>, "
+            "and </b0> exactly. Do not merge or reorder items.\n\n"
+            f"Items: {json.dumps(items, ensure_ascii=False)}"
+        )
+        output = self._run_cli(prompt, self.batch_schema)
+        translations = output.get("translations")
+        if not isinstance(translations, list) or len(translations) != len(texts):
+            raise ValueError(
+                "Claude Code returned a different number of batch translations"
+            )
+        return [
+            self._validate_translation(source, translation)
+            for source, translation in zip(texts, translations)
+        ]
+
+    def _chunks(self, texts: list[str]):
+        chunk: list[str] = []
+        char_count = 0
+        for text in texts:
+            if chunk and (
+                len(chunk) >= self.batch_size
+                or char_count + len(text) > self.max_batch_chars
+            ):
+                yield chunk
+                chunk = []
+                char_count = 0
+            chunk.append(text)
+            char_count += len(text)
+        if chunk:
+            yield chunk
+
+    def translate_batch(
+        self, texts: list[str], ignore_cache: bool = False
+    ) -> list[str]:
+        results: list[str | None] = [None] * len(texts)
+        missing_indices: list[int] = []
+        missing_texts: list[str] = []
+
+        for index, text in enumerate(texts):
+            cached = None
+            if not (self.ignore_cache or ignore_cache):
+                cached = self.cache.get(text)
+            if cached is None:
+                missing_indices.append(index)
+                missing_texts.append(text)
+            else:
+                results[index] = cached
+
+        offset = 0
+        for chunk in self._chunks(missing_texts):
+            translations = self._translate_uncached_batch(chunk)
+            for text, translation in zip(chunk, translations):
+                index = missing_indices[offset]
+                results[index] = translation
+                self.cache.set(text, translation)
+                offset += 1
+
+        if any(result is None for result in results):
+            raise RuntimeError(
+                "Claude Code batch translation produced incomplete results"
+            )
+        return cast(list[str], results)

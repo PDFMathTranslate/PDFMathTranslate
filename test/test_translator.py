@@ -1,4 +1,5 @@
 import unittest
+import json
 from textwrap import dedent
 from unittest import mock
 
@@ -6,7 +7,12 @@ from ollama import ResponseError as OllamaResponseError
 
 from pdf2zh import cache
 from pdf2zh.config import ConfigManager
-from pdf2zh.translator import BaseTranslator, OllamaTranslator, OpenAIlikedTranslator
+from pdf2zh.translator import (
+    BaseTranslator,
+    ClaudeCodeTranslator,
+    OllamaTranslator,
+    OpenAIlikedTranslator,
+)
 
 # Since it is necessary to test whether the functionality meets the expected requirements,
 # private functions and private methods are allowed to be called.
@@ -81,6 +87,81 @@ class TestTranslator(unittest.TestCase):
         translator = BaseTranslator("en", "zh", "test", False)
         with self.assertRaises(NotImplementedError):
             translator.translate("Hello World")
+
+
+class TestClaudeCodeTranslator(unittest.TestCase):
+    def setUp(self):
+        ConfigManager.clear()
+        self.test_db = cache.init_test_db()
+        self.envs = {
+            "CLAUDE_CODE_BIN": "claude-test",
+            "CLAUDE_CODE_MODEL": "sonnet",
+            "CLAUDE_CODE_TIMEOUT": "15",
+        }
+
+    def tearDown(self):
+        cache.clean_test_db(self.test_db)
+        ConfigManager.clear()
+
+    def translator(self):
+        return ClaudeCodeTranslator(
+            "en", "ja", None, envs=self.envs, ignore_cache=False
+        )
+
+    @mock.patch("pdf2zh.translator.subprocess.run")
+    def test_command_and_structured_output(self, run):
+        run.return_value = mock.Mock(
+            returncode=0,
+            stdout=json.dumps({"structured_output": {"translation": "翻訳 {v0}"}}),
+            stderr="",
+        )
+        translator = self.translator()
+
+        result = translator.do_translate("source {v0}")
+
+        self.assertEqual(result, "翻訳 {v0}")
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "claude-test")
+        self.assertIn("-p", command)
+        self.assertIn("--no-session-persistence", command)
+        self.assertIn("--json-schema", command)
+        self.assertNotIn("shell", run.call_args.kwargs)
+        self.assertIn("source {v0}", run.call_args.kwargs["input"])
+        self.assertEqual(run.call_args.kwargs["timeout"], 15)
+
+    def test_batch_preserves_order_and_cache(self):
+        translator = self.translator()
+        translator._translate_uncached_batch = mock.Mock(return_value=["一", "二"])
+
+        first = translator.translate_batch(["one", "two"])
+        second = translator.translate_batch(["one", "two"])
+
+        self.assertEqual(first, ["一", "二"])
+        self.assertEqual(second, first)
+        translator._translate_uncached_batch.assert_called_once_with(["one", "two"])
+
+    def test_batch_rejects_wrong_result_count(self):
+        translator = self.translator()
+        translator._run_cli = mock.Mock(return_value={"translations": ["only one"]})
+        with self.assertRaisesRegex(ValueError, "different number"):
+            translator._translate_uncached_batch(["one", "two"])
+
+    def test_placeholder_validation(self):
+        translator = self.translator()
+        with self.assertRaisesRegex(ValueError, "placeholders"):
+            translator._validate_translation("source {v0}", "翻訳")
+
+    @mock.patch("pdf2zh.translator.subprocess.run", side_effect=FileNotFoundError)
+    def test_missing_binary_has_clear_error(self, _run):
+        translator = self.translator()
+        undecorated = translator._run_cli.__wrapped__
+        with self.assertRaisesRegex(RuntimeError, "executable not found"):
+            undecorated(translator, "prompt", translator.single_schema)
+
+    def test_invalid_timeout_is_rejected(self):
+        self.envs["CLAUDE_CODE_TIMEOUT"] = "never"
+        with self.assertRaisesRegex(ValueError, "positive number"):
+            self.translator()
 
 
 class TestOpenAIlikedTranslator(unittest.TestCase):

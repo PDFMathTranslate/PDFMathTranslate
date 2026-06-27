@@ -22,6 +22,7 @@ from pdf2zh.translator import (
     AzureTranslator,
     BaseTranslator,
     BingTranslator,
+    ClaudeCodeTranslator,
     DeepLTranslator,
     DeepLXTranslator,
     DeepseekTranslator,
@@ -161,11 +162,58 @@ class TranslateConverter(PDFConverterEx):
         if not envs:
             envs = {}
         for translator in [GoogleTranslator, BingTranslator, DeepLTranslator, DeepLXTranslator, OllamaTranslator, XinferenceTranslator, AzureOpenAITranslator,
-                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, MiniMaxTranslator, OpenAIlikedTranslator, QwenMtTranslator, X302AITranslator]:
+                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, MiniMaxTranslator, OpenAIlikedTranslator, ClaudeCodeTranslator, QwenMtTranslator, X302AITranslator]:
             if service_name == translator.name:
                 self.translator = translator(lang_in, lang_out, service_model, envs=envs, prompt=prompt, ignore_cache=ignore_cache)
         if not self.translator:
             raise ValueError("Unsupported translation service")
+
+    @staticmethod
+    def _is_passthrough_text(text: str) -> bool:
+        return not text.strip() or re.match(r"^\{v\d+\}$", text) is not None
+
+    def _translate_text_segments(self, texts: list[str]) -> list[str]:
+        @retry(wait=wait_fixed(1))
+        def worker(text: str):
+            if self._is_passthrough_text(text):
+                return text
+            try:
+                return self.translator.translate(text)
+            except BaseException as exc:
+                if log.isEnabledFor(logging.DEBUG):
+                    log.exception(exc)
+                else:
+                    log.exception(exc, exc_info=False)
+                raise
+
+        if self.translator.batch_size > 1:
+            results = list(texts)
+            indices = [
+                index
+                for index, text in enumerate(texts)
+                if not self._is_passthrough_text(text)
+            ]
+            if not indices:
+                return results
+
+            batch = [texts[index] for index in indices]
+            translated = self.translator.translate_batch(batch)
+            if len(translated) != len(batch):
+                raise ValueError("translator returned an invalid batch size")
+            for index, translation in zip(indices, translated):
+                results[index] = translation
+            return results
+
+        max_workers = self.thread
+        if self.translator.max_concurrency is not None:
+            max_workers = min(
+                max_workers or self.translator.max_concurrency,
+                self.translator.max_concurrency,
+            )
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers
+        ) as executor:
+            return list(executor.map(worker, texts))
 
     def receive_layout(self, ltpage: LTPage):
         # 段落
@@ -345,23 +393,7 @@ class TranslateConverter(PDFConverterEx):
         # B. 段落翻译
         log.debug("\n==========[SSTACK]==========\n")
 
-        @retry(wait=wait_fixed(1))
-        def worker(s: str):  # 多线程翻译
-            if not s.strip() or re.match(r"^\{v\d+\}$", s):  # 空白和公式不翻译
-                return s
-            try:
-                new = self.translator.translate(s)
-                return new
-            except BaseException as e:
-                if log.isEnabledFor(logging.DEBUG):
-                    log.exception(e)
-                else:
-                    log.exception(e, exc_info=False)
-                raise e
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=self.thread
-        ) as executor:
-            news = list(executor.map(worker, sstk))
+        news = self._translate_text_segments(sstk)
 
         ############################################################
         # C. 新文档排版

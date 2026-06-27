@@ -105,6 +105,35 @@ class TestTranslateConverter(unittest.TestCase):
                 service="InvalidService",
             )
 
+    def test_claude_code_translator_initialization(self):
+        converter = TranslateConverter(
+            self.rsrcmgr,
+            layout=self.layout,
+            lang_in="en",
+            lang_out="ja",
+            service="claude-code:sonnet",
+            envs={
+                "CLAUDE_CODE_BIN": "claude",
+                "CLAUDE_CODE_MODEL": "sonnet",
+                "CLAUDE_CODE_TIMEOUT": "120",
+            },
+        )
+        self.assertEqual(converter.translator.name, "claude-code")
+        self.assertEqual(converter.translator.model, "sonnet")
+        self.assertEqual(converter.translator.max_concurrency, 1)
+
+    def test_batch_translation_preserves_passthrough_segments(self):
+        translator = Mock()
+        translator.batch_size = 8
+        translator.max_concurrency = 1
+        translator.translate_batch.return_value = ["一", "二"]
+        self.converter.translator = translator
+
+        result = self.converter._translate_text_segments(["one", "", "{v0}", "two"])
+
+        self.assertEqual(result, ["一", "", "{v0}", "二"])
+        translator.translate_batch.assert_called_once_with(["one", "two"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -417,6 +417,7 @@ def yadt_main(parsed_args) -> int:
         AzureOpenAITranslator,
         GoogleTranslator,
         BingTranslator,
+        ClaudeCodeTranslator,
         DeepLTranslator,
         DeepLXTranslator,
         OllamaTranslator,
@@ -461,6 +462,7 @@ def yadt_main(parsed_args) -> int:
         GroqTranslator,
         DeepseekTranslator,
         OpenAIlikedTranslator,
+        ClaudeCodeTranslator,
         QwenMtTranslator,
         X302AITranslator,
     ]:
@@ -496,7 +498,11 @@ def yadt_main(parsed_args) -> int:
             lang_out=lang_out,
             no_dual=False,
             no_mono=False,
-            qps=parsed_args.thread,
+            qps=(
+                min(parsed_args.thread, translator.max_concurrency)
+                if translator.max_concurrency is not None
+                else parsed_args.thread
+            ),
         )
 
         async def yadt_translate_coro(yadt_config):
