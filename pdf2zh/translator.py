@@ -1181,7 +1181,7 @@ class QwenMtTranslator(OpenAITranslator):
 
     def do_translate(self, text) -> str:
         """
-        Qwen-MT Model reqeust to send translation_options to the server.
+        Qwen-MT Model request to send translation_options to the server.
         domains are options, but suggested. it must be in English.
         """
         translation_options = {
