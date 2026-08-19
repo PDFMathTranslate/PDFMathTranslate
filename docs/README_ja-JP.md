@@ -235,7 +235,7 @@ pdf2zh example.pdf -li en -lo ja
 |**Argos Translate**|`argos`| | |See [argos-translate](https://github.com/argosopentech/argos-translate)|
 |**Grok**|`grok`| `GORK_API_KEY`, `GORK_MODEL` | `[Your GORK_API_KEY]`, `grok-2-1212` |See [Grok](https://docs.x.ai/docs/overview)|
 |**DeepSeek**|`deepseek`| `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | `[Your DEEPSEEK_API_KEY]`, `deepseek-chat` |See [DeepSeek](https://www.deepseek.com/)|
-|**MiniMax**|`minimax`| `MINIMAX_API_KEY`, `MINIMAX_MODEL` | `[Your MINIMAX_API_KEY]`, `MiniMax-M2.7` |See [MiniMax](https://platform.minimaxi.com/)|
+|**MiniMax**|`minimax`| `MINIMAX_API_KEY`, `MINIMAX_MODEL`, `MINIMAX_BASE_URL` (optional) | `[Your MINIMAX_API_KEY]`, `MiniMax-M3`, `https://api.minimax.io/v1` |See [MiniMax](https://platform.minimaxi.com/). Defaults to `MiniMax-M3`; set `MINIMAX_MODEL=MiniMax-M2.7` for the previous model. Set `MINIMAX_BASE_URL=https://api.minimaxi.com/v1` for the China endpoint.|
 |**OpenAI-Liked**|`openailiked`| `OPENAILIKED_BASE_URL`, `OPENAILIKED_API_KEY`, `OPENAILIKED_MODEL` | `url`, `[Your Key]`, `model name` | None |
 |**OpenAI-Liked**|`openailiked`| `OPENAILIKED_BASE_URL`, `OPENAILIKED_API_KEY`, `OPENAILIKED_MODEL`, `OPENAILIKED_STOP_TOKENS`, `OPENAILIKED_MAX_TOKENS` | `url`, `[Your Key]`, `model name`, `model name`, ` `, `-1` | None |
 
