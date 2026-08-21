@@ -29,6 +29,7 @@ The following languages are supported:
 - Russian
 - Spanish
 - Italian
+- Thai
 
 ## Preview
 
