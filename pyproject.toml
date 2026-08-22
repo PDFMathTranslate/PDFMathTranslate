@@ -28,7 +28,8 @@ dependencies = [
     "onnx",
     "onnxruntime",
     "opencv-python-headless",
-    "tencentcloud-sdk-python-tmt",
+    # 3.1.129+ dropped TextTranslateRequest used by TencentTranslator
+    "tencentcloud-sdk-python-tmt>=3.0.1257,<=3.1.121",
     "pdfminer-six==20250416",
     "gradio_pdf>=0.0.21",
     "pikepdf",
