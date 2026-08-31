@@ -144,8 +144,9 @@ if isinstance(enabled_services, list):
     enabled_services_names = [str(_).lower().strip() for _ in enabled_services]
     enabled_services = [
         k
-        for k in service_map.keys()
+        for k, v in service_map.items()
         if str(k).lower().strip() in enabled_services_names
+        or (hasattr(v, "name") and str(v.name).lower().strip() in enabled_services_names)
     ]
     if len(enabled_services) == 0:
         raise RuntimeError("No services available.")
