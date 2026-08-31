@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import re
+import subprocess
+import tempfile
 import unicodedata
 from copy import copy
 from string import Template
@@ -100,6 +102,11 @@ class BaseTranslator:
         translation = self.do_translate(text)
         self.cache.set(text, translation)
         return translation
+
+    def translate_batch(
+        self, texts: list[str], ignore_cache: bool = False
+    ) -> list[str]:
+        return [self.translate(text, ignore_cache=ignore_cache) for text in texts]
 
     def do_translate(self, text: str) -> str:
         """
@@ -1120,6 +1127,519 @@ class OpenAIlikedTranslator(OpenAITranslator):
             content = response.choices[0].message.content.strip()
         content = self.think_filter_regex.sub("", content).strip()
         return content
+
+
+class CodexTranslator(BaseTranslator):
+    name = "codex"
+    envs = {
+        "CODEX_BIN": "codex",
+        "CODEX_PROFILE": None,
+        "CODEX_MODEL": "gpt-5.4-mini",
+        "CODEX_TIMEOUT": "120",
+    }
+    CustomPrompt = True
+    REQUIRED_EXEC_FLAGS = {
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--sandbox",
+        "--color",
+        "--output-schema",
+        "--output-last-message",
+    }
+    FAST_PATH_FLAGS = {"--ignore-user-config", "--ignore-rules", "--model", "-c"}
+    COMPAT_PATH_FLAGS = {"--model", "--profile"}
+    MAX_BATCH_ITEMS = 8
+    MAX_BATCH_CHARS = 2500
+    MAX_ITEM_CHARS = 300
+    HSPACE_RE = r"[ \t\u00A0]+"
+    CJK_CHAR_RE = r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]"
+    CJK_PUNCT_RE = r"[\u3001-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]"
+    PLACEHOLDER_RE = r"(?:\{\{v\d+\}\}|\{v\d+\})"
+
+    def __init__(
+        self, lang_in, lang_out, model, envs=None, prompt=None, ignore_cache=False
+    ):
+        self.set_envs(envs)
+        if not model:
+            model = self.envs["CODEX_MODEL"]
+        super().__init__(lang_in, lang_out, model, ignore_cache)
+        self.codex_bin = self.envs["CODEX_BIN"] or "codex"
+        self.profile = self.envs["CODEX_PROFILE"]
+        self.timeout = int(self.envs.get("CODEX_TIMEOUT") or "120")
+        self.prompttext = prompt
+        self.single_output_schema = {
+            "type": "object",
+            "properties": {
+                "translation": {"type": "string"},
+            },
+            "required": ["translation"],
+            "additionalProperties": False,
+        }
+        self.batch_output_schema = {
+            "type": "object",
+            "properties": {
+                "translations": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                }
+            },
+            "required": ["translations"],
+            "additionalProperties": False,
+        }
+        self.codex_version = None
+        self.supported_exec_flags: set[str] = set()
+        self.fast_command_available = False
+        self.compat_command_available = False
+        self.preferred_command_mode = "fast"
+        self._probe_cli()
+        self.add_cache_impact_parameters("profile", self.profile)
+        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+        self.add_cache_impact_parameters("command_mode", self.preferred_command_mode)
+
+    def _build_codex_prompt(self, text: str) -> str:
+        base_prompt = self.prompt(text, self.prompttext)[0]["content"]
+        return (
+            f"{base_prompt}\n\n"
+            "Additional requirements:\n"
+            '- Return valid JSON with exactly one field: {"translation": "..."}.\n'
+            '- The "translation" field must contain only the translated text.\n'
+            "- Preserve markdown structure and formulas.\n"
+            "- Preserve placeholder tokens like {v0} and {{v0}} exactly.\n"
+            "- Do not add explanations, comments, or code fences.\n"
+        )
+
+    def _build_batch_prompt(self, texts: list[str]) -> str:
+        indexed_texts = [
+            {"index": idx, "text": text} for idx, text in enumerate(texts, start=1)
+        ]
+        serialized_texts = json.dumps(indexed_texts, ensure_ascii=False)
+        return (
+            "You are a professional, authentic machine translation engine. "
+            "Only output valid JSON that matches the provided schema.\n\n"
+            f"Translate the `text` field of each object in the following JSON array "
+            f"from {self.lang_in} to {self.lang_out}. Preserve markdown structure, "
+            "formulas, and placeholder tokens like {v0} and {{v0}} exactly. "
+            f"There are exactly {len(texts)} items. Return exactly {len(texts)} "
+            "translated strings in ascending `index` order. Do not merge, drop, "
+            "or reorder items.\n\n"
+            f"Source Texts JSON: {serialized_texts}\n\n"
+            'Return JSON with exactly one field: {"translations": ["...", "..."]}.'
+        )
+
+    def _run_probe_command(self, args: list[str]) -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(
+                [self.codex_bin, *args],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                f"codex executable not found: {self.codex_bin}"
+            ) from exc
+
+    def _probe_cli(self):
+        version_result = self._run_probe_command(["--version"])
+        if version_result.returncode != 0:
+            detail = version_result.stderr.strip() or version_result.stdout.strip()
+            raise RuntimeError(f"Codex CLI version probe failed: {detail}")
+        self.codex_version = version_result.stdout.strip() or version_result.stderr.strip()
+
+        help_result = self._run_probe_command(["exec", "--help"])
+        if help_result.returncode != 0:
+            detail = help_result.stderr.strip() or help_result.stdout.strip()
+            raise RuntimeError(f"Codex CLI help probe failed: {detail}")
+
+        help_text = "\n".join([help_result.stdout, help_result.stderr])
+        candidate_flags = (
+            self.REQUIRED_EXEC_FLAGS
+            | self.FAST_PATH_FLAGS
+            | self.COMPAT_PATH_FLAGS
+            | {"--config"}
+        )
+        self.supported_exec_flags = {
+            flag for flag in candidate_flags if flag in help_text
+        }
+        if "--config" in self.supported_exec_flags:
+            self.supported_exec_flags.add("-c")
+
+        missing_required = self.REQUIRED_EXEC_FLAGS - self.supported_exec_flags
+        if missing_required:
+            raise RuntimeError(
+                "Codex CLI is missing required exec flags: "
+                + ", ".join(sorted(missing_required))
+            )
+
+        self.compat_command_available = True
+        self.fast_command_available = self.FAST_PATH_FLAGS.issubset(
+            self.supported_exec_flags
+        ) and not self.profile
+        if self.profile:
+            if "--profile" not in self.supported_exec_flags:
+                raise RuntimeError(
+                    "Codex CLI does not support --profile, but CODEX_PROFILE was set."
+                )
+            self.preferred_command_mode = "compat"
+        elif self.fast_command_available:
+            self.preferred_command_mode = "fast"
+        else:
+            self.preferred_command_mode = "compat"
+
+    @staticmethod
+    def _is_passthrough_text(text: str) -> bool:
+        return not text.strip() or re.match(r"^\{v\d+\}$", text) is not None
+
+    @staticmethod
+    def _looks_like_unsupported_flag(detail: str) -> bool:
+        lowered = detail.lower()
+        return any(
+            needle in lowered
+            for needle in [
+                "unexpected argument",
+                "unrecognized option",
+                "unknown option",
+                "found argument",
+            ]
+        )
+
+    def _build_command(
+        self, prompt_text: str, schema_path: str, output_path: str, mode: str
+    ) -> list[str]:
+        command = [
+            self.codex_bin,
+            "exec",
+        ]
+        if mode == "fast":
+            command.extend(["--ignore-user-config", "--ignore-rules"])
+        if mode == "compat" and self.profile:
+            command.extend(["--profile", self.profile])
+        command.extend(
+            [
+                "--skip-git-repo-check",
+                "--ephemeral",
+                "--sandbox",
+                "read-only",
+                "--color",
+                "never",
+            ]
+        )
+        if self.model and "--model" in self.supported_exec_flags:
+            command.extend(["--model", self.model])
+        if mode == "fast" and "-c" in self.supported_exec_flags:
+            command.extend(["-c", 'model_reasoning_effort="none"'])
+        command.extend(
+            [
+                "--output-schema",
+                schema_path,
+                "--output-last-message",
+                output_path,
+            ]
+        )
+        command.append(prompt_text)
+        return command
+
+    def _load_json_output(self, output_path: str) -> dict:
+        if not os.path.exists(output_path):
+            raise RuntimeError("Codex translator did not produce an output file.")
+        try:
+            with open(output_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Codex translator returned invalid JSON output.") from exc
+
+    def _load_translation(self, output_path: str) -> str:
+        payload = self._load_json_output(output_path)
+        translation = payload.get("translation")
+        if not isinstance(translation, str) or not translation.strip():
+            raise RuntimeError(
+                "Codex translator output is missing the required 'translation' field."
+            )
+        return self._normalize_translation_output(translation.strip())
+
+    def _load_batch_translations(self, output_path: str, expected_count: int) -> list[str]:
+        payload = self._load_json_output(output_path)
+        translations = payload.get("translations")
+        if not isinstance(translations, list):
+            raise RuntimeError(
+                "Codex translator output is missing the required 'translations' field."
+            )
+        if len(translations) != expected_count:
+            raise RuntimeError(
+                "Codex translator batch output must have the same length as the input."
+            )
+        if any(not isinstance(item, str) or not item.strip() for item in translations):
+            raise RuntimeError("Codex translator batch output contains empty items.")
+        return [self._normalize_translation_output(item.strip()) for item in translations]
+
+    def _iter_command_modes(self) -> list[str]:
+        if self.preferred_command_mode == "compat" or not self.fast_command_available:
+            return ["compat"]
+        return ["fast", "compat"]
+
+    def _execute_codex_request(
+        self, prompt_text: str, schema: dict, response_loader, mode_override: str = None
+    ):
+        with tempfile.TemporaryDirectory(prefix="pdf2zh-codex-") as workdir:
+            schema_path = os.path.join(workdir, "output.schema.json")
+            output_path = os.path.join(workdir, "output.json")
+            with open(schema_path, "w", encoding="utf-8") as f:
+                json.dump(schema, f)
+
+            modes = [mode_override] if mode_override else self._iter_command_modes()
+            last_error = None
+            for mode in modes:
+                command = self._build_command(prompt_text, schema_path, output_path, mode)
+                try:
+                    result = subprocess.run(
+                        command,
+                        cwd=workdir,
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        text=True,
+                        timeout=self.timeout,
+                        check=False,
+                    )
+                except FileNotFoundError as exc:
+                    raise RuntimeError(
+                        f"codex executable not found: {self.codex_bin}"
+                    ) from exc
+                except subprocess.TimeoutExpired as exc:
+                    raise RuntimeError(
+                        f"Codex translator timed out after {self.timeout} seconds."
+                    ) from exc
+
+                if result.returncode == 0:
+                    if mode == "compat":
+                        self.preferred_command_mode = "compat"
+                    return response_loader(output_path)
+
+                detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+                last_error = RuntimeError(
+                    f"Codex translator failed with exit code {result.returncode}: {detail}"
+                )
+                if (
+                    mode == "fast"
+                    and "compat" in modes
+                    and self._looks_like_unsupported_flag(detail)
+                ):
+                    self.preferred_command_mode = "compat"
+                    continue
+                raise last_error
+
+            raise last_error
+
+    def _run_single_translation(self, text: str) -> str:
+        prompt_text = self._build_codex_prompt(text)
+        return self._execute_codex_request(
+            prompt_text, self.single_output_schema, self._load_translation
+        )
+
+    def _chunk_batch(self, texts: list[tuple[int, str]]) -> list[list[tuple[int, str]]]:
+        batches = []
+        current_batch = []
+        current_chars = 0
+        for item in texts:
+            _, text = item
+            text_len = len(text)
+            if current_batch and (
+                len(current_batch) >= self.MAX_BATCH_ITEMS
+                or current_chars + text_len > self.MAX_BATCH_CHARS
+            ):
+                batches.append(current_batch)
+                current_batch = []
+                current_chars = 0
+            current_batch.append(item)
+            current_chars += text_len
+        if current_batch:
+            batches.append(current_batch)
+        return batches
+
+    def _split_long_text(self, text: str) -> list[str]:
+        if len(text) <= self.MAX_ITEM_CHARS:
+            return [text]
+
+        sentence_like_parts = []
+        cursor = 0
+        for match in re.finditer(r".*?(?:[.!?;:](?:\s+|$)|$)", text, flags=re.DOTALL):
+            part = match.group(0)
+            if not part:
+                continue
+            sentence_like_parts.append(part)
+            cursor = match.end()
+            if cursor >= len(text):
+                break
+        if not sentence_like_parts:
+            sentence_like_parts = [text]
+
+        chunks = []
+        current = ""
+        for part in sentence_like_parts:
+            if len(part) > self.MAX_ITEM_CHARS:
+                if current:
+                    chunks.append(current)
+                    current = ""
+                remaining = part
+                while len(remaining) > self.MAX_ITEM_CHARS:
+                    split_at = remaining.rfind(" ", 0, self.MAX_ITEM_CHARS)
+                    if split_at <= 0:
+                        split_at = self.MAX_ITEM_CHARS
+                    chunks.append(remaining[:split_at])
+                    remaining = remaining[split_at:]
+                if remaining:
+                    current = remaining
+                continue
+
+            if current and len(current) + len(part) > self.MAX_ITEM_CHARS:
+                chunks.append(current)
+                current = part
+            else:
+                current += part
+
+        if current:
+            chunks.append(current)
+        return [chunk for chunk in chunks if chunk]
+
+    def _run_batch_translation(self, texts: list[str]) -> list[str]:
+        prompt_text = self._build_batch_prompt(texts)
+        try:
+            return self._execute_codex_request(
+                prompt_text,
+                self.batch_output_schema,
+                lambda output_path: self._load_batch_translations(
+                    output_path, len(texts)
+                ),
+            )
+        except RuntimeError as exc:
+            if len(texts) == 1:
+                return [self._run_single_translation(texts[0])]
+            detail = str(exc)
+            if (
+                "translations" not in detail
+                and "same length" not in detail
+                and "empty items" not in detail
+                and "timed out" not in detail
+            ):
+                raise
+            midpoint = len(texts) // 2
+            return self._run_batch_translation(texts[:midpoint]) + self._run_batch_translation(
+                texts[midpoint:]
+            )
+
+    @staticmethod
+    def _recombine_translated_segments(
+        source_segments: list[str], translated_segments: list[str]
+    ) -> str:
+        combined = ""
+        for idx, translated in enumerate(translated_segments):
+            cleaned = translated.strip()
+            if idx == 0:
+                combined = cleaned
+                continue
+            previous_source = source_segments[idx - 1]
+            current_source = source_segments[idx]
+            boundary_match = re.search(r"(\s+)$", previous_source) or re.match(
+                r"^(\s+)", current_source
+            )
+            boundary = boundary_match.group(1) if boundary_match else ""
+            if boundary and not combined.endswith(boundary):
+                combined += boundary
+            combined += cleaned
+        return combined
+
+    def _normalize_translation_output(self, text: str) -> str:
+        if self.lang_out.lower() not in {"zh", "zh-cn", "zh-tw", "zh-hans", "zh-hant"}:
+            return text
+
+        pairs = [
+            (self.CJK_CHAR_RE, self.CJK_CHAR_RE),
+            (self.CJK_CHAR_RE, self.CJK_PUNCT_RE),
+            (self.CJK_PUNCT_RE, self.CJK_CHAR_RE),
+            (self.CJK_CHAR_RE, self.PLACEHOLDER_RE),
+            (self.PLACEHOLDER_RE, self.CJK_CHAR_RE),
+            (self.CJK_PUNCT_RE, self.PLACEHOLDER_RE),
+            (self.PLACEHOLDER_RE, self.CJK_PUNCT_RE),
+        ]
+        normalized = text
+        changed = True
+        while changed:
+            previous = normalized
+            for left, right in pairs:
+                normalized = re.sub(
+                    fr"({left}){self.HSPACE_RE}({right})", r"\1\2", normalized
+                )
+            changed = normalized != previous
+        return normalized
+
+    def do_translate(self, text: str) -> str:
+        return self._run_single_translation(text)
+
+    def translate_batch(
+        self, texts: list[str], ignore_cache: bool = False
+    ) -> list[str]:
+        if self.prompttext:
+            return BaseTranslator.translate_batch(self, texts, ignore_cache=ignore_cache)
+
+        results = [None] * len(texts)
+        pending_items = []
+        for idx, text in enumerate(texts):
+            if self._is_passthrough_text(text):
+                results[idx] = text
+                continue
+            if not (self.ignore_cache or ignore_cache):
+                cache_result = self.cache.get(text)
+                if cache_result is not None:
+                    results[idx] = cache_result
+                    continue
+            pending_items.append((idx, text))
+
+        if pending_items:
+            expanded_items = []
+            segment_sources: dict[int, list[str]] = {}
+            recombine_map: dict[int, list[int]] = {}
+            expanded_index = 0
+            for original_idx, source_text in pending_items:
+                segments = self._split_long_text(source_text)
+                segment_sources[original_idx] = segments
+                recombine_map[original_idx] = []
+                for segment in segments:
+                    expanded_items.append((expanded_index, segment))
+                    recombine_map[original_idx].append(expanded_index)
+                    expanded_index += 1
+
+            expanded_results: dict[int, str] = {}
+            for batch in self._chunk_batch(expanded_items):
+                batch_texts = [text for _, text in batch]
+                translated_batch = self._run_batch_translation(batch_texts)
+                for (batch_idx, _source_text), translated_text in zip(batch, translated_batch):
+                    expanded_results[batch_idx] = translated_text
+
+            for original_idx, source_text in pending_items:
+                segment_indices = recombine_map[original_idx]
+                translated_segments = [
+                    expanded_results[segment_idx] for segment_idx in segment_indices
+                ]
+                combined_translation = self._recombine_translated_segments(
+                    segment_sources[original_idx], translated_segments
+                )
+                combined_translation = self._normalize_translation_output(
+                    combined_translation
+                )
+                results[original_idx] = combined_translation
+                self.cache.set(source_text, combined_translation)
+
+        return [text if result is None else result for text, result in zip(texts, results)]
+
+    def get_formular_placeholder(self, id: int):
+        return "{{v" + str(id) + "}}"
+
+    def get_rich_text_left_placeholder(self, id: int):
+        return self.get_formular_placeholder(id)
+
+    def get_rich_text_right_placeholder(self, id: int):
+        return self.get_formular_placeholder(id + 1)
 
 
 class QwenMtTranslator(OpenAITranslator):
