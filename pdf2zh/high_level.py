@@ -194,8 +194,21 @@ def translate_stream(
     font_list.append((noto_name, font_path))
 
     doc_en = Document(stream=stream)
-    stream = io.BytesIO()
-    doc_en.save(stream)
+    out_stream = io.BytesIO()
+    try:
+        doc_en.save(out_stream)
+    except Exception as e:
+        # 输入 PDF 结构损坏导致 MuPDF 无法重写时,用 pikepdf(qpdf)修复后重试
+        logger.warning(f"Malformed input PDF ({e}); repairing with pikepdf")
+        from pikepdf import Pdf
+
+        repaired = io.BytesIO()
+        with Pdf.open(io.BytesIO(stream)) as _pdf:
+            _pdf.save(repaired)
+        doc_en = Document(stream=repaired.getvalue())
+        out_stream = io.BytesIO()
+        doc_en.save(out_stream)
+    stream = out_stream
     doc_zh = Document(stream=stream)
     page_count = doc_zh.page_count
     # font_list = [("GoNotoKurrent-Regular.ttf", font_path), ("tiro", None)]
