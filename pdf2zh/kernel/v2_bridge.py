@@ -98,7 +98,7 @@ def _pages_to_v2(pages: Any) -> str:
     if isinstance(pages, str):
         return pages
     if isinstance(pages, list):
-        return ",".join(str(p) for p in pages)
+        return ",".join(str(p + 1) for p in pages)
     return str(pages)
 
 
