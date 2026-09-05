@@ -185,7 +185,7 @@ class TestV2Bridge(unittest.TestCase):
         req = TranslateRequest(files=["test.pdf"], pages=[0, 1, 4])
         args = request_to_cli_args(req)
         self.assertIn("--pages", args)
-        self.assertIn("0,1,4", args)
+        self.assertIn("1,2,5", args)
 
     def test_cli_args_compatible(self):
         from pdf2zh.kernel.v2_bridge import request_to_cli_args

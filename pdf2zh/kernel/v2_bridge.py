@@ -98,7 +98,8 @@ def _pages_to_v2(pages: Any) -> str:
     if isinstance(pages, str):
         return pages
     if isinstance(pages, list):
-        return ",".join(str(p) for p in pages)
+        # v1 pages are 0-based, v2 CLI expects 1-based page indices
+        return ",".join(str(p + 1) for p in pages)
     return str(pages)
 
 
