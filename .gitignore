@@ -184,3 +184,7 @@ BidiCharacterTest.txt
 
 # gradio local artefacts
 .gradio/
+
+# local translation test output
+out/
+out*/

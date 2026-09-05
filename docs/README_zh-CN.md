@@ -1,6 +1,6 @@
 <div align="center">
 
-[English](../README.md) | 简体中文 | [繁體中文](README_zh-TW.md) | [日本語](README_ja-JP.md)
+[English](../README.md) | 简体中文 | [繁體中文](README_zh-TW.md) | [日本語](README_ja-JP.md) | [العربية](README_ar-AR.md)
 
 <img src="./images/banner.png" width="320px"  alt="PDF2ZH"/>  
 
