@@ -28,7 +28,7 @@ dependencies = [
     "onnx",
     "onnxruntime",
     "opencv-python-headless",
-    "tencentcloud-sdk-python-tmt",
+    "tencentcloud-sdk-python-tmt<3.1",
     "pdfminer-six==20250416",
     "gradio_pdf>=0.0.21",
     "pikepdf",
