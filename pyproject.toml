@@ -47,6 +47,9 @@ backend = [
 argostranslate = [
     "argostranslate"
 ]
+litellm = [
+    "litellm>=1.55.0,<1.85"
+]
 mcp = [
     "mcp>=1.6.0",
 ]
