@@ -1161,11 +1161,11 @@ class QwenMtTranslator(OpenAITranslator):
     def lang_mapping(input_lang: str) -> str:
         """
         Mapping the language code to the language code that Aliyun Qwen-Mt model supports.
-        Since all existings languagues codes used in gui.py are able to be mapped, the original
-        languague code will not be checked.
+        Supports both short codes (e.g. "zh") and region-qualified codes (e.g. "zh-CN").
         """
         langdict = {
             "zh": "Chinese",
+            "zh-CN": "Chinese",
             "zh-TW": "Chinese",
             "en": "English",
             "fr": "French",
@@ -1177,7 +1177,16 @@ class QwenMtTranslator(OpenAITranslator):
             "it": "Italian",
         }
 
-        return langdict[input_lang]
+        if input_lang in langdict:
+            return langdict[input_lang]
+        # Fall back to prefix match (e.g. "zh-SG" -> "zh" -> "Chinese")
+        prefix = input_lang.split("-")[0]
+        if prefix in langdict:
+            return langdict[prefix]
+        raise KeyError(
+            f"Unsupported language code for Qwen-MT: '{input_lang}'. "
+            f"Supported codes: {list(langdict.keys())}"
+        )
 
     def do_translate(self, text) -> str:
         """
