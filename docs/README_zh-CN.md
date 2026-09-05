@@ -242,6 +242,9 @@ $env:HF_ENDPOINT = https://hf-mirror.com
 | `-o`         | 输出目录                                                                                                     | `pdf2zh example.pdf -o output`                 |
 | `-f`, `-c`   | [异常](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#exceptions)                     | `pdf2zh example.pdf -f "(MS.*)"`               |
 | `-cp`        | 兼容模式                                                                                                     | `pdf2zh example.pdf --compatible`              |
+| `--rtl`      | 从右向左排版：`auto`（默认）、`on`、`off`                                                                    | `pdf2zh example.pdf -lo ar --rtl on`           |
+| `--digit-form` | 输出数字形式：`auto`（默认）、`western`、`arabic`                                                          | `pdf2zh example.pdf -lo ar --digit-form western` |
+| `--min-font-scale` | 自适应缩放时的最小字号比例                                                                             | `pdf2zh example.pdf --min-font-scale 0.7`      |
 | `--share`    | 公开链接                                                                                                     | `pdf2zh -i --share`                            |
 | `--authorized` | [授权](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#auth)                         | `pdf2zh -i --authorized users.txt [auth.html]` |
 | `--prompt`   | [自定义提示](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#prompt)                   | `pdf2zh --prompt [prompt.txt]`                 |
