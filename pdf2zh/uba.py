@@ -125,9 +125,7 @@ def _explicit_levels(
         if t in ("RLE", "LRE", "RLO", "LRO"):
             levels[i] = stack[-1][0]
             rtl = t in ("RLE", "RLO")
-            new_level = (
-                (stack[-1][0] + 1) | 1 if rtl else (stack[-1][0] + 2) & ~1
-            )
+            new_level = (stack[-1][0] + 1) | 1 if rtl else (stack[-1][0] + 2) & ~1
             if (
                 new_level <= MAX_DEPTH
                 and overflow_isolate == 0
@@ -147,9 +145,7 @@ def _explicit_levels(
             levels[i] = stack[-1][0]
             if stack[-1][1] != "n":
                 types[i] = stack[-1][1]
-            new_level = (
-                (stack[-1][0] + 1) | 1 if rtl else (stack[-1][0] + 2) & ~1
-            )
+            new_level = (stack[-1][0] + 1) | 1 if rtl else (stack[-1][0] + 2) & ~1
             if (
                 new_level <= MAX_DEPTH
                 and overflow_isolate == 0
@@ -229,9 +225,7 @@ def _isolating_run_sequences(
         first = run[0]
         # Start a sequence only at a run that is not a continuation, i.e. whose
         # first character is not a PDI matching an isolate initiator.
-        if types[first] == "PDI" and any(
-            matching.get(j) == first for j in matching
-        ):
+        if types[first] == "PDI" and any(matching.get(j) == first for j in matching):
             continue
         seq: list[int] = []
         cur = k
@@ -348,7 +342,9 @@ def _canonical(cp: int) -> int:
     return CANONICAL_BRACKETS.get(cp, cp)
 
 
-def _bracket_pairs(text: str, types: list[str], seq: list[int]) -> list[tuple[int, int]]:
+def _bracket_pairs(
+    text: str, types: list[str], seq: list[int]
+) -> list[tuple[int, int]]:
     """BD16: identify bracket pairs within one isolating run sequence."""
     stack: list[tuple[int, int]] = []  # (canonical closing codepoint, position in seq)
     pairs: list[tuple[int, int]] = []
@@ -468,9 +464,7 @@ def _resolve_implicit(types: list[str], levels: list[int], seq: list[int]) -> No
 # ---------------------------------------------------------------------------
 
 
-def _reset_levels(
-    original: list[str], levels: list[int], para_level: int
-) -> None:
+def _reset_levels(original: list[str], levels: list[int], para_level: int) -> None:
     """Rule L1, using the ORIGINAL bidi classes."""
     n = len(levels)
     reset_from: int | None = None

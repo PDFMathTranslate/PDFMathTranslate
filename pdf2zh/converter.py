@@ -541,7 +541,6 @@ class TranslateConverter(PDFConverterEx):
             line_height = default_line_height
             scale = 1.0
             expand_step = 0
-            last_nlines = 10**9
             # 原文只有一行的段落（标题、题注、表格单元）默认应保持一行
             want_one_line = not para.brk
             res = None
@@ -625,7 +624,6 @@ class TranslateConverter(PDFConverterEx):
                     break
 
                 # 只剩横向放不下（单词比栏还宽）时才继续按步缩小
-                last_nlines = nlines
                 if scale > 0.6:
                     scale -= 0.05
                 elif scale > self.min_font_scale:

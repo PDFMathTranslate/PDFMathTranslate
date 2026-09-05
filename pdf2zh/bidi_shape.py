@@ -492,9 +492,7 @@ class Shaper:
         buf.language = language
         hb.shape(self.font, buf, {"kern": True, "liga": True})
         infos = [(gi.codepoint, gi.cluster) for gi in buf.glyph_infos]
-        positions = [
-            (p.x_advance, p.x_offset, p.y_offset) for p in buf.glyph_positions
-        ]
+        positions = [(p.x_advance, p.x_offset, p.y_offset) for p in buf.glyph_positions]
         return infos, positions
 
     def shape(
@@ -672,6 +670,7 @@ def _build_line(
         k = j
     return LayoutLine(items=out, width=sum(_item_width(i) for i in out))
 
+
 def _item_width(item: Item) -> float:
     return item.width
 
@@ -757,9 +756,7 @@ def layout_paragraph(
                 language=item.language,
                 size=size,
             )
-    items = [
-        it for it in items if isinstance(it, PlaceholderRun) or it.glyphs
-    ]
+    items = [it for it in items if isinstance(it, PlaceholderRun) or it.glyphs]
 
     body_width = max(x1 - x0, 1e-6)
     first_width = max(body_width - indent, 1e-6)
@@ -791,6 +788,7 @@ def layout_paragraph(
 # ---------------------------------------------------------------------------
 # Self-test: guards python-bidi's internal API
 # ---------------------------------------------------------------------------
+
 
 def self_test() -> None:
     """Cheap wiring check for the bidi engine.

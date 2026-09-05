@@ -125,7 +125,11 @@ class TestBidiIntegration(unittest.TestCase):
     def test_common_script_inherits(self):
         chars = bs.resolve_levels("مع النتائج", base_rtl=True)
         runs = bs.segment_runs(
-            chars, {}, font_key="noto", language="ar", size=12,
+            chars,
+            {},
+            font_key="noto",
+            language="ar",
+            size=12,
             placeholder_width=lambda v: 0.0,
         )
         # The space must not split the phrase into three runs.
@@ -195,8 +199,13 @@ class TestShaping(unittest.TestCase):
             "الكتاب", rtl=True, script="Arab", language="ar", size=12
         )
         run = bs.TextRun(
-            text="الكتاب", level=1, font_key="noto", script="Arab",
-            language="ar", size=12, glyphs=glyphs,
+            text="الكتاب",
+            level=1,
+            font_key="noto",
+            script="Arab",
+            language="ar",
+            size=12,
+            glyphs=glyphs,
         )
         self.assertEqual(run.visual_glyphs(), list(reversed(glyphs)))
 
@@ -239,7 +248,9 @@ class TestLayout(unittest.TestCase):
     def test_formula_placeholder_is_positioned(self):
         res = self._layout(MIXED)
         placeholders = [
-            p for line in res.lines for p in line
+            p
+            for line in res.lines
+            for p in line
             if isinstance(p.item, bs.PlaceholderRun)
         ]
         self.assertEqual(len(placeholders), 1)
@@ -249,8 +260,7 @@ class TestLayout(unittest.TestCase):
     def test_embedded_ltr_run_keeps_its_direction(self):
         res = self._layout(MIXED)
         runs = [
-            p.item for line in res.lines for p in line
-            if isinstance(p.item, bs.TextRun)
+            p.item for line in res.lines for p in line if isinstance(p.item, bs.TextRun)
         ]
         latin = [r for r in runs if "NumPy" in r.text]
         self.assertTrue(latin)
@@ -259,10 +269,14 @@ class TestLayout(unittest.TestCase):
     def test_arabic_appears_at_the_right_of_embedded_latin(self):
         res = self._layout(MIXED)
         line = res.lines[0]
-        latin = next(p for p in line if isinstance(p.item, bs.TextRun)
-                     and "NumPy" in p.item.text)
-        arabic = next(p for p in line if isinstance(p.item, bs.TextRun)
-                      and "المعادلة" in p.item.text)
+        latin = next(
+            p for p in line if isinstance(p.item, bs.TextRun) and "NumPy" in p.item.text
+        )
+        arabic = next(
+            p
+            for p in line
+            if isinstance(p.item, bs.TextRun) and "المعادلة" in p.item.text
+        )
         self.assertLess(latin.x, arabic.x, "Arabic must sit to the right")
 
     def test_indent_is_mirrored_for_rtl(self):
