@@ -27,6 +27,10 @@ class TranslateRequest:
     skip_subset_fonts: bool = False
     ignore_cache: bool = False
     compatible: bool = False
+    # RTL layout options, see docs/RTL_ARABIC_SUPPORT.md
+    rtl: str = "auto"
+    digit_form: str = "auto"
+    min_font_scale: float = 0.6
 
 
 @dataclass

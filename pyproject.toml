@@ -35,6 +35,8 @@ dependencies = [
     "peewee>=3.17.8",
     "fontTools",
     "babeldoc>=0.1.22, <0.3.0",
+    # RTL / complex-script text layout (see docs/RTL_ARABIC_SUPPORT.md)
+    "uharfbuzz>=0.39",
     "rich",
 ]
 

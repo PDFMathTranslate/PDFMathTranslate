@@ -178,3 +178,9 @@ cython_debug/
 uv.lock
 *.pdf
 *.docx
+
+# Unicode bidi conformance data (fetched on demand, see test/test_uba.py)
+BidiCharacterTest.txt
+
+# gradio local artefacts
+.gradio/
