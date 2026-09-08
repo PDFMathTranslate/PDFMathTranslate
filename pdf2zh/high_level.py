@@ -32,6 +32,12 @@ from pdf2zh.config import ConfigManager
 from babeldoc.assets.assets import get_font_and_metadata
 
 NOTO_NAME = "noto"
+LAYOUT_EXCLUDED_CLASSES = (
+    "figure",
+    "table",
+    "isolate_formula",
+    "formula_caption",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +141,7 @@ def translate_patch(
             # kdtree 是不可能 kdtree 的，不如直接渲染成图片，用空间换时间
             box = np.ones((pix.height, pix.width))
             h, w = box.shape
-            vcls = ["abandon", "figure", "table", "isolate_formula", "formula_caption"]
+            vcls = LAYOUT_EXCLUDED_CLASSES
             for i, d in enumerate(page_layout.boxes):
                 if page_layout.names[int(d.cls)] not in vcls:
                     x0, y0, x1, y1 = d.xyxy.squeeze()
