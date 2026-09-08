@@ -110,6 +110,10 @@ lang_map = {
     "Russian": "ru",
     "Spanish": "es",
     "Italian": "it",
+    "Arabic": "ar",
+    "Hebrew": "he",
+    "Persian": "fa",
+    "Urdu": "ur",
 }
 
 # The following variable associate strings with page ranges

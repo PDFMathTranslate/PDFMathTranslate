@@ -57,6 +57,9 @@ class LegacyKernel:
             "envs": request.envs or {},
             "skip_subset_fonts": request.skip_subset_fonts,
             "ignore_cache": request.ignore_cache,
+            "rtl": request.rtl,
+            "digit_form": request.digit_form,
+            "min_font_scale": request.min_font_scale,
             "compatible": request.compatible,
         }
 

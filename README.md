@@ -14,7 +14,7 @@
 
 <div align="center">
 
-English | [简体中文](docs/README_zh-CN.md) | [繁體中文](docs/README_zh-TW.md) | [日本語](docs/README_ja-JP.md) | [한국어](docs/README_ko-KR.md)
+English | [简体中文](docs/README_zh-CN.md) | [繁體中文](docs/README_zh-TW.md) | [日本語](docs/README_ja-JP.md) | [한국어](docs/README_ko-KR.md) | [العربية](docs/README_ar-AR.md)
 
 <img src="./docs/images/banner.png" width="320px"  alt="PDF2ZH"/>
 
@@ -265,6 +265,9 @@ In the following table, we list all advanced options for reference:
 | `-o`                  | Output dir                                                                                                    | `pdf2zh example.pdf -o output`                 |
 | `-f`, `-c`            | [Exceptions](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#exceptions)                | `pdf2zh example.pdf -f "(MS.*)"`               |
 | `-cp`                 | Compatibility Mode                                                                                            | `pdf2zh example.pdf --compatible`              |
+| `--rtl`               | Right-to-left layout: `auto` (default), `on`, `off`                                                           | `pdf2zh example.pdf -lo ar --rtl on`           |
+| `--digit-form`        | Digit form in output: `auto` (default), `western`, `arabic`                                                   | `pdf2zh example.pdf -lo ar --digit-form western` |
+| `--min-font-scale`    | Lower bound for shrink-to-fit font scaling                                                                    | `pdf2zh example.pdf --min-font-scale 0.7`      |
 | `--skip-subset-fonts` | [Skip font subset](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#font-subset)         | `pdf2zh example.pdf --skip-subset-fonts`       |
 | `--ignore-cache`      | [Ignore translate cache](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#cache)         | `pdf2zh example.pdf --ignore-cache`            |
 | `--share`             | Public link                                                                                                   | `pdf2zh -i --share`                            |

@@ -79,6 +79,26 @@ def create_parser() -> argparse.ArgumentParser:
         help="The code of target language.",
     )
     parse_params.add_argument(
+        "--rtl",
+        type=str,
+        choices=["auto", "on", "off"],
+        default="auto",
+        help="Right-to-left layout for the target language (default: derive from --lang-out).",
+    )
+    parse_params.add_argument(
+        "--digit-form",
+        type=str,
+        choices=["auto", "western", "arabic"],
+        default="auto",
+        help="Digit form to use in the translated text (default: keep what the translator returned).",
+    )
+    parse_params.add_argument(
+        "--min-font-scale",
+        type=float,
+        default=0.6,
+        help="Lower bound for shrink-to-fit font scaling when a paragraph overflows.",
+    )
+    parse_params.add_argument(
         "--service",
         "-s",
         type=str,
@@ -216,12 +236,15 @@ def parse_args(args: Optional[List[str]]) -> argparse.Namespace:
 
     if parsed_args.pages:
         pages = []
+        # Page numbers are 1-based on the command line.  Clamp at 0 so that
+        # "-p 0-100" does not produce index -1, which silently selects the
+        # LAST page of the document instead of the first.
         for p in parsed_args.pages.split(","):
             if "-" in p:
                 start, end = p.split("-")
-                pages.extend(range(int(start) - 1, int(end)))
+                pages.extend(range(max(int(start) - 1, 0), int(end)))
             else:
-                pages.append(int(p) - 1)
+                pages.append(max(int(p) - 1, 0))
         parsed_args.raw_pages = parsed_args.pages
         parsed_args.pages = pages
 
@@ -361,6 +384,9 @@ def main(args: Optional[List[str]] = None) -> int:
         pages=parsed_args.pages,
         lang_in=parsed_args.lang_in,
         lang_out=parsed_args.lang_out,
+        rtl=parsed_args.rtl,
+        digit_form=parsed_args.digit_form,
+        min_font_scale=parsed_args.min_font_scale,
         service=parsed_args.service,
         thread=parsed_args.thread,
         vfont=parsed_args.vfont,

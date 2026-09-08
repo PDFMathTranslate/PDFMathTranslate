@@ -28,6 +28,7 @@ from pdf2zh.converter import TranslateConverter
 from pdf2zh.doclayout import OnnxModel
 from pdf2zh.pdfinterp import PDFPageInterpreterEx
 
+from pdf2zh.bidi_shape import is_rtl_lang
 from pdf2zh.config import ConfigManager
 from babeldoc.assets.assets import get_font_and_metadata
 
@@ -87,6 +88,10 @@ def translate_patch(
     envs: Dict = None,
     prompt: Template = None,
     ignore_cache: bool = False,
+    font_path: str = "",
+    rtl: str = "auto",
+    digit_form: str = "auto",
+    min_font_scale: float = 0.6,
     **kwarg: Any,
 ) -> None:
     rsrcmgr = PDFResourceManager()
@@ -105,6 +110,10 @@ def translate_patch(
         envs,
         prompt,
         ignore_cache,
+        font_path,
+        rtl,
+        digit_form,
+        min_font_scale,
     )
 
     assert device is not None
@@ -184,6 +193,9 @@ def translate_stream(
     prompt: Template = None,
     skip_subset_fonts: bool = False,
     ignore_cache: bool = False,
+    rtl: str = "auto",
+    digit_form: str = "auto",
+    min_font_scale: float = 0.6,
     **kwarg: Any,
 ):
     font_list = [("tiro", None)]
@@ -243,6 +255,10 @@ def translate_stream(
     doc_en.insert_file(doc_zh)
     for id in range(page_count):
         doc_en.move_page(page_count + id, id * 2 + 1)
+    if is_rtl_lang(lang_out) and not skip_subset_fonts:
+        # RTL 走 HarfBuzz 整形，写入的字形 ID 不经过 has_glyph，子集化可能丢字形
+        logger.info("RTL target language: skipping font subsetting to preserve glyphs")
+        skip_subset_fonts = True
     if not skip_subset_fonts:
         doc_zh.subset_fonts(fallback=True)
         doc_en.subset_fonts(fallback=True)
@@ -319,6 +335,9 @@ def translate(
     prompt: Template = None,
     skip_subset_fonts: bool = False,
     ignore_cache: bool = False,
+    rtl: str = "auto",
+    digit_form: str = "auto",
+    min_font_scale: float = 0.6,
     **kwarg: Any,
 ):
     if not files:
@@ -394,8 +413,10 @@ def translate(
             s_raw,
             **locals(),
         )
-        file_mono = Path(output) / f"{filename}-mono.pdf"
-        file_dual = Path(output) / f"{filename}-dual.pdf"
+        output_dir = Path(output) if output else Path(".")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        file_mono = output_dir / f"{filename}-mono.pdf"
+        file_dual = output_dir / f"{filename}-dual.pdf"
         doc_mono = open(file_mono, "wb")
         doc_dual = open(file_dual, "wb")
         doc_mono.write(s_mono)
