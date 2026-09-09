@@ -14,12 +14,6 @@ import requests
 import xinference_client
 from azure.ai.translation.text import TextTranslationClient
 from azure.core.credentials import AzureKeyCredential
-from tencentcloud.common import credential
-from tencentcloud.tmt.v20180321.models import (
-    TextTranslateRequest,
-    TextTranslateResponse,
-)
-from tencentcloud.tmt.v20180321.tmt_client import TmtClient
 
 from pdf2zh.cache import TranslationCache
 from pdf2zh.config import ConfigManager
@@ -30,6 +24,30 @@ from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
 logger = logging.getLogger(__name__)
+
+
+def _tencent_translate_imports():
+    """Import the Tencent TMT bindings on demand.
+
+    tencentcloud-sdk-python-tmt releases newer than 3.1 removed
+    TextTranslateRequest/TextTranslateResponse. Importing them at module
+    load used to break every other translation engine on environments
+    where such a version is installed.
+    """
+    try:
+        from tencentcloud.common import credential
+        from tencentcloud.tmt.v20180321.models import (
+            TextTranslateRequest,
+            TextTranslateResponse,
+        )
+        from tencentcloud.tmt.v20180321.tmt_client import TmtClient
+    except ImportError as exc:
+        raise ImportError(
+            "tencentcloud-sdk-python-tmt is missing or incompatible; "
+            "install it with a version below 3.1 to use the Tencent engine "
+            "(e.g. `pip install 'tencentcloud-sdk-python-tmt<3.1'`)"
+        ) from exc
+    return credential, TextTranslateRequest, TextTranslateResponse, TmtClient
 
 
 def remove_control_characters(s):
@@ -763,6 +781,12 @@ class TencentTranslator(BaseTranslator):
     def __init__(
         self, lang_in, lang_out, model, envs=None, ignore_cache=False, **kwargs
     ):
+        (
+            credential,
+            TextTranslateRequest,
+            TextTranslateResponse,
+            TmtClient,
+        ) = _tencent_translate_imports()
         self.set_envs(envs)
         super().__init__(lang_in, lang_out, model)
         try:
@@ -783,7 +807,7 @@ class TencentTranslator(BaseTranslator):
 
     def _translate_chunk(self, text):
         self.req.SourceText = text
-        resp: TextTranslateResponse = self.client.TextTranslate(self.req)
+        resp = self.client.TextTranslate(self.req)
         return resp.TargetText
 
     def do_translate(self, text):
