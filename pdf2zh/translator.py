@@ -29,10 +29,9 @@ logger = logging.getLogger(__name__)
 def _tencent_translate_imports():
     """Import the Tencent TMT bindings on demand.
 
-    tencentcloud-sdk-python-tmt releases newer than 3.1 removed
-    TextTranslateRequest/TextTranslateResponse. Importing them at module
-    load used to break every other translation engine on environments
-    where such a version is installed.
+    Importing these optional bindings at module load would prevent all
+    translation engines from loading when the Tencent SDK is missing
+    or no longer exposes the TextTranslate API.
     """
     try:
         from tencentcloud.common import credential
@@ -44,8 +43,8 @@ def _tencent_translate_imports():
     except ImportError as exc:
         raise ImportError(
             "tencentcloud-sdk-python-tmt is missing or incompatible; "
-            "install it with a version below 3.1 to use the Tencent engine "
-            "(e.g. `pip install 'tencentcloud-sdk-python-tmt<3.1'`)"
+            "install the version pinned by pdf2zh to use the Tencent engine "
+            "(e.g. `pip install 'tencentcloud-sdk-python-tmt==3.1.70'`)"
         ) from exc
     return credential, TextTranslateRequest, TextTranslateResponse, TmtClient
 

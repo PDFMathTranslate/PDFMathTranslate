@@ -234,14 +234,15 @@ class TestTencentLazyImport(unittest.TestCase):
         return _blocked
 
     def test_module_imports_without_tencent_sdk(self):
-        # Reload pdf2zh.translator with the Tencent SDK unimportable:
-        # a missing/incompatible SDK must not break other engines.
-        with mock.patch(
-            "builtins.__import__",
-            side_effect=self._block_tencent_imports(__import__),
-        ):
-            reloaded = importlib.reload(translator_module)
-        self.assertIsNotNone(reloaded.BaseTranslator)
+        # Restore the module namespace after reload so other tests keep
+        # using the same translator classes, regardless of test order.
+        with mock.patch.dict(translator_module.__dict__):
+            with mock.patch(
+                "builtins.__import__",
+                side_effect=self._block_tencent_imports(__import__),
+            ):
+                reloaded = importlib.reload(translator_module)
+                self.assertIsNotNone(reloaded.BaseTranslator)
 
     def test_tencent_translator_raises_informative_error_without_sdk(self):
         with mock.patch(
@@ -250,7 +251,8 @@ class TestTencentLazyImport(unittest.TestCase):
         ):
             with self.assertRaises(ImportError) as context:
                 translator_module.TencentTranslator("en", "zh", "", False)
-        self.assertIn("tencentcloud-sdk-python-tmt", str(context.exception))
+        self.assertIn("tencentcloud-sdk-python-tmt==3.1.70", str(context.exception))
+        self.assertIsInstance(context.exception.__cause__, ModuleNotFoundError)
 
 
 if __name__ == "__main__":
