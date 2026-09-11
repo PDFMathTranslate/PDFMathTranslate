@@ -77,6 +77,7 @@ We've provided a detailed table on the required [environment variables](https://
 |**MiniMax**|`minimax`| `MINIMAX_API_KEY`, `MINIMAX_MODEL` | `[Your MINIMAX_API_KEY]`, `MiniMax-M2.7` |See [MiniMax](https://platform.minimaxi.com/)|
 |**OpenAI-Liked**|`openailiked`| `OPENAILIKED_BASE_URL`, `OPENAILIKED_API_KEY`, `OPENAILIKED_MODEL` | `url`, `[Your Key]`, `model name` | None |
 |**OpenAI-Liked**|`openailiked`| `OPENAILIKED_BASE_URL`, `OPENAILIKED_API_KEY`, `OPENAILIKED_MODEL`, `OPENAILIKED_STOP_TOKENS`, `OPENAILIKED_MAX_TOKENS` | `url`, `[Your Key]`, `model name`, ` `, `-1` | None |
+|**Codex**|`codex`| `CODEX_BIN`, `CODEX_PROFILE`, `CODEX_MODEL`, `CODEX_TIMEOUT` | `codex`, ``, `gpt-5.4-mini`, `120` | Uses the local Codex CLI login state. No API key required. By default it prefers a lightweight non-interactive path with reasoning effort forced to `none`, and effective concurrency is currently fixed to `1`. |
 |**Ali Qwen Translation**|`qwen-mt`| `ALI_MODEL`, `ALI_API_KEY`, `ALI_DOMAINS` | `qwen-mt-turbo`, `[Your Key]`, `scientific paper` | Tranditional Chinese are not yet supported, it will be translated into Simplified Chinese. More see [Qwen MT](https://bailian.console.aliyun.com/?spm=5176.28197581.0.0.72e329a4HRxe99#/model-market/detail/qwen-mt-turbo) |
 
 For large language models that are compatible with the OpenAI API but not listed in the table above, you can set environment variables using the same method outlined for OpenAI in the table.

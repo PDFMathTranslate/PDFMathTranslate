@@ -1,8 +1,10 @@
 import unittest
 from unittest.mock import Mock, patch, MagicMock
+from types import SimpleNamespace
 from pdfminer.layout import LTPage, LTChar, LTLine
 from pdfminer.pdfinterp import PDFResourceManager
 from pdf2zh.converter import PDFConverterEx, TranslateConverter
+from pdf2zh.translator import CodexTranslator
 
 
 class TestPDFConverterEx(unittest.TestCase):
@@ -104,6 +106,57 @@ class TestTranslateConverter(unittest.TestCase):
                 lang_out="zh",
                 service="InvalidService",
             )
+
+    def test_codex_translation_service(self):
+        with patch.object(CodexTranslator, "_probe_cli", return_value=None):
+            converter = TranslateConverter(
+                self.rsrcmgr,
+                layout=self.layout,
+                lang_in="en",
+                lang_out="zh",
+                service="codex",
+            )
+        self.assertIsInstance(converter.translator, CodexTranslator)
+
+    @patch.object(CodexTranslator, "_probe_cli", return_value=None)
+    def test_codex_translate_segments_uses_batch_path(self, _mock_probe):
+        converter = TranslateConverter(
+            self.rsrcmgr,
+            layout=self.layout,
+            lang_in="en",
+            lang_out="zh",
+            service="codex",
+        )
+        converter.thread = 4
+        converter.translator = SimpleNamespace(
+            name="codex",
+            translate_batch=Mock(return_value=["甲", "乙"]),
+        )
+
+        result = converter._translate_text_segments(["a", "{v1}", "b", " "])
+
+        self.assertEqual(["甲", "{v1}", "乙", " "], result)
+        converter.translator.translate_batch.assert_called_once_with(["a", "b"])
+
+    @patch.object(CodexTranslator, "_probe_cli", return_value=None)
+    def test_codex_translate_segments_retries_transient_batch_errors(self, _mock_probe):
+        converter = TranslateConverter(
+            self.rsrcmgr,
+            layout=self.layout,
+            lang_in="en",
+            lang_out="zh",
+            service="codex",
+        )
+        converter.thread = 1
+        converter.translator = SimpleNamespace(
+            name="codex",
+            translate_batch=Mock(side_effect=[RuntimeError("temporary"), ["甲", "乙"]]),
+        )
+
+        result = converter._translate_text_segments(["a", "b"])
+
+        self.assertEqual(["甲", "乙"], result)
+        self.assertEqual(2, converter.translator.translate_batch.call_count)
 
 
 if __name__ == "__main__":

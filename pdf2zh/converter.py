@@ -13,7 +13,7 @@ from pdfminer.pdffont import PDFCIDFont, PDFUnicodeNotDefined
 from pdfminer.pdfinterp import PDFGraphicState, PDFResourceManager
 from pdfminer.utils import apply_matrix_pt, mult_matrix
 from pymupdf import Font
-from tenacity import retry, wait_fixed
+from tenacity import retry, wait_fixed, stop_after_attempt
 
 from pdf2zh.translator import (
     AnythingLLMTranslator,
@@ -22,6 +22,7 @@ from pdf2zh.translator import (
     AzureTranslator,
     BaseTranslator,
     BingTranslator,
+    CodexTranslator,
     DeepLTranslator,
     DeepLXTranslator,
     DeepseekTranslator,
@@ -161,11 +162,65 @@ class TranslateConverter(PDFConverterEx):
         if not envs:
             envs = {}
         for translator in [GoogleTranslator, BingTranslator, DeepLTranslator, DeepLXTranslator, OllamaTranslator, XinferenceTranslator, AzureOpenAITranslator,
-                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, MiniMaxTranslator, OpenAIlikedTranslator, QwenMtTranslator, X302AITranslator]:
+                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, MiniMaxTranslator, OpenAIlikedTranslator, CodexTranslator, QwenMtTranslator, X302AITranslator]:
             if service_name == translator.name:
                 self.translator = translator(lang_in, lang_out, service_model, envs=envs, prompt=prompt, ignore_cache=ignore_cache)
         if not self.translator:
             raise ValueError("Unsupported translation service")
+
+    @staticmethod
+    def _is_passthrough_text(s: str) -> bool:
+        return not s.strip() or re.match(r"^\{v\d+\}$", s)
+
+    def _translate_text_segments(self, sstk: list[str]) -> list[str]:
+        @retry(wait=wait_fixed(1))
+        def worker(s: str):
+            if self._is_passthrough_text(s):
+                return s
+            try:
+                return self.translator.translate(s)
+            except BaseException as e:
+                if log.isEnabledFor(logging.DEBUG):
+                    log.exception(e)
+                else:
+                    log.exception(e, exc_info=False)
+                raise e
+
+        @retry(wait=wait_fixed(1), stop=stop_after_attempt(3))
+        def batch_worker(texts: list[str]):
+            try:
+                return self.translator.translate_batch(texts)
+            except BaseException as e:
+                if log.isEnabledFor(logging.DEBUG):
+                    log.exception(e)
+                else:
+                    log.exception(e, exc_info=False)
+                raise e
+
+        if getattr(self.translator, "name", "") == "codex":
+            if self.thread and self.thread > 1:
+                log.warning(
+                    "Codex translator currently forces effective concurrency to 1; requested thread=%s is ignored.",
+                    self.thread,
+                )
+            results = list(sstk)
+            translatable_indices = []
+            translatable_texts = []
+            for idx, text in enumerate(sstk):
+                if self._is_passthrough_text(text):
+                    continue
+                translatable_indices.append(idx)
+                translatable_texts.append(text)
+            if translatable_texts:
+                translated_batch = batch_worker(translatable_texts)
+                for idx, translated in zip(translatable_indices, translated_batch):
+                    results[idx] = translated
+            return results
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.thread
+        ) as executor:
+            return list(executor.map(worker, sstk))
 
     def receive_layout(self, ltpage: LTPage):
         # 段落
@@ -344,24 +399,7 @@ class TranslateConverter(PDFConverterEx):
         ############################################################
         # B. 段落翻译
         log.debug("\n==========[SSTACK]==========\n")
-
-        @retry(wait=wait_fixed(1))
-        def worker(s: str):  # 多线程翻译
-            if not s.strip() or re.match(r"^\{v\d+\}$", s):  # 空白和公式不翻译
-                return s
-            try:
-                new = self.translator.translate(s)
-                return new
-            except BaseException as e:
-                if log.isEnabledFor(logging.DEBUG):
-                    log.exception(e)
-                else:
-                    log.exception(e, exc_info=False)
-                raise e
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=self.thread
-        ) as executor:
-            news = list(executor.map(worker, sstk))
+        news = self._translate_text_segments(sstk)
 
         ############################################################
         # C. 新文档排版
