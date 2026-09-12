@@ -333,6 +333,15 @@ class OllamaTranslator(BaseTranslator):
             messages=self.prompt(text, self.prompt_template),
             options=self.options,
         )
+        # Some ollama server versions return an error payload as HTTP 200
+        # (e.g. {"error": "model ... not found"}), in which case client.chat()
+        # yields that dict instead of raising. Accessing .message on it would
+        # raise a cryptic "AttributeError: 'dict' object has no attribute
+        # 'message'"; surface the real error instead.
+        if isinstance(response, dict):
+            raise RuntimeError(
+                f"Ollama API error: {response.get('error', response)}"
+            )
         content = self._remove_cot_content(response.message.content or "")
         return content.strip()
 
