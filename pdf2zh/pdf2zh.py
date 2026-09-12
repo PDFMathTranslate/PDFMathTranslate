@@ -196,6 +196,11 @@ def create_parser() -> argparse.ArgumentParser:
         type=str,
         help='Use translations from JSON ({"translations": {"source": "target"}}) or page-artifacts directory.',
     )
+    parse_params.add_argument(
+        "--strict-translation-file",
+        action="store_true",
+        help="With --translation-file: fail instead of calling the service when a source text has no entry.",
+    )
 
     parse_params.add_argument(
         "--mcp", action="store_true", help="Launch pdf2zh MCP server in STDIO mode"

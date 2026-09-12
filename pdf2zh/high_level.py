@@ -170,11 +170,14 @@ def translate_patch(
     source_pages_dir: str = None,
     page_artifacts_dir: str = None,
     translation_file: str = None,
+    strict_translation_file: bool = False,
     **kwarg: Any,
 ) -> None:
     translation_map: Dict[str, str] = {}
     if translation_file:
         translation_map = _load_translation_map(translation_file)
+    elif strict_translation_file:
+        raise ValueError("strict_translation_file requires translation_file")
 
     rsrcmgr = PDFResourceManager()
     layout = {}
@@ -193,6 +196,7 @@ def translate_patch(
         prompt,
         ignore_cache,
         translation_map,
+        strict_translation_file,
     )
 
     assert device is not None
@@ -337,6 +341,7 @@ def translate_stream(
     source_pages_dir: str = None,
     page_artifacts_dir: str = None,
     translation_file: str = None,
+    strict_translation_file: bool = False,
     **kwarg: Any,
 ):
     font_list = [("tiro", None)]
@@ -516,6 +521,7 @@ def translate(
     skip_subset_fonts: bool = False,
     ignore_cache: bool = False,
     translation_file: str = None,
+    strict_translation_file: bool = False,
     **kwarg: Any,
 ):
     if not files:

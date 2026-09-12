@@ -31,6 +31,7 @@ from pdf2zh.translator import (
     GoogleTranslator,
     GrokTranslator,
     GroqTranslator,
+    IdentityTranslator,
     ModelScopeTranslator,
     OllamaTranslator,
     OpenAIlikedTranslator,
@@ -47,6 +48,18 @@ log = logging.getLogger(__name__)
 
 # Pattern to skip: empty strings and formula-only strings like "{v0}"
 _SKIP_TRANSLATE_RE = re.compile(r"^\{v\d+\}$")
+
+
+class MissingTranslationError(ValueError):
+    """Raised in strict translation-file mode when a source text has no entry."""
+
+    def __init__(self, missing: list[str]):
+        self.missing = list(missing)
+        preview = "; ".join(repr(t[:80]) for t in self.missing[:5])
+        more = f" (+{len(self.missing) - 5} more)" if len(self.missing) > 5 else ""
+        super().__init__(
+            f"{len(self.missing)} source text(s) missing from translation file: {preview}{more}"
+        )
 
 
 def _should_skip(s: str) -> bool:
@@ -155,8 +168,14 @@ class TranslateConverter(PDFConverterEx):
         prompt: Template = None,
         ignore_cache: bool = False,
         translation_map: Dict[str, str] = None,
+        strict_translation_file: bool = False,
     ) -> None:
         super().__init__(rsrcmgr)
+        self.strict_translation_file = strict_translation_file
+        if strict_translation_file and not translation_map:
+            raise ValueError(
+                "strict_translation_file requires a non-empty translation_map"
+            )
         self.vfont = vfont
         self.vchar = vchar
         self.thread = thread
@@ -178,7 +197,7 @@ class TranslateConverter(PDFConverterEx):
         if not envs:
             envs = {}
         for translator in [GoogleTranslator, BingTranslator, DeepLTranslator, DeepLXTranslator, OllamaTranslator, XinferenceTranslator, AzureOpenAITranslator,
-                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, GeminiBatchTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, OpenAIlikedTranslator, QwenMtTranslator, X302AITranslator]:
+                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, GeminiBatchTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, IdentityTranslator, DeepseekTranslator, OpenAIlikedTranslator, QwenMtTranslator, X302AITranslator]:
             if service_name == translator.name:
                 self.translator = translator(lang_in, lang_out, service_model, envs=envs, prompt=prompt, ignore_cache=ignore_cache)
         if not self.translator:
@@ -441,6 +460,8 @@ class TranslateConverter(PDFConverterEx):
                 if text in self.translations:
                     continue
                 missing_texts.append(text)
+            if missing_texts and self.strict_translation_file:
+                raise MissingTranslationError(missing_texts)
             if missing_texts:
                 if hasattr(self.translator, "translate_batch"):
                     self.translator.translate_batch(missing_texts)
@@ -484,6 +505,8 @@ class TranslateConverter(PDFConverterEx):
                 return s
             if s in self.translations:
                 return self.translations[s]
+            if self.strict_translation_file:
+                raise MissingTranslationError([s])
             try:
                 new = self.translator.translate(s)
                 self.translations[s] = new

@@ -14,12 +14,6 @@ import requests
 import xinference_client
 from azure.ai.translation.text import TextTranslationClient
 from azure.core.credentials import AzureKeyCredential
-from tencentcloud.common import credential
-from tencentcloud.tmt.v20180321.models import (
-    TextTranslateRequest,
-    TextTranslateResponse,
-)
-from tencentcloud.tmt.v20180321.tmt_client import TmtClient
 
 from pdf2zh.cache import TranslationCache
 from pdf2zh.config import ConfigManager
@@ -393,6 +387,44 @@ class XinferenceTranslator(BaseTranslator):
             except Exception as e:
                 print(e)
         raise Exception("All models failed")
+
+
+class IdentityTranslator(BaseTranslator):
+    """Return every text unchanged.
+
+    Used for extraction-only runs and for replaying a prepared translation file
+    without contacting any translation service. Formula placeholders use the
+    ``{vN}`` form so source artifacts match what a translation file must key on.
+    """
+
+    name = "identity"
+
+    def __init__(
+        self,
+        lang_in,
+        lang_out,
+        model,
+        envs=None,
+        prompt=None,
+        ignore_cache=True,
+        **kwargs,
+    ):
+        super().__init__(lang_in, lang_out, model, ignore_cache=True)
+
+    def translate(self, text: str, ignore_cache: bool = False) -> str:
+        return text
+
+    def do_translate(self, text: str) -> str:
+        return text
+
+    def get_formular_placeholder(self, id: int):
+        return "{{v" + str(id) + "}}"
+
+    def get_rich_text_left_placeholder(self, id: int):
+        return self.get_formular_placeholder(id)
+
+    def get_rich_text_right_placeholder(self, id: int):
+        return self.get_formular_placeholder(id + 1)
 
 
 class OpenAITranslator(BaseTranslator):
@@ -887,6 +919,12 @@ class TencentTranslator(BaseTranslator):
     def __init__(
         self, lang_in, lang_out, model, envs=None, ignore_cache=False, **kwargs
     ):
+        from tencentcloud.common import credential
+        from tencentcloud.tmt.v20180321.models import (
+            TextTranslateRequest,
+        )
+        from tencentcloud.tmt.v20180321.tmt_client import TmtClient
+
         self.set_envs(envs)
         super().__init__(lang_in, lang_out, model)
         try:
@@ -904,7 +942,7 @@ class TencentTranslator(BaseTranslator):
 
     def do_translate(self, text):
         self.req.SourceText = text
-        resp: TextTranslateResponse = self.client.TextTranslate(self.req)
+        resp = self.client.TextTranslate(self.req)
         return resp.TargetText
 
 
