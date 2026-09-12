@@ -12,6 +12,14 @@ import ollama
 import openai
 import requests
 import xinference_client
+
+try:
+    import litellm as _litellm
+
+    _litellm_RateLimitError = _litellm.RateLimitError
+except ImportError:
+    _litellm = None
+    _litellm_RateLimitError = Exception
 from azure.ai.translation.text import TextTranslationClient
 from azure.core.credentials import AzureKeyCredential
 from tencentcloud.common import credential
@@ -1196,3 +1204,72 @@ class QwenMtTranslator(OpenAITranslator):
             extra_body={"translation_options": translation_options},
         )
         return response.choices[0].message.content.strip()
+
+
+class LiteLLMTranslator(BaseTranslator):
+    # https://docs.litellm.ai/docs/
+    name = "litellm"
+    envs = {
+        "LITELLM_MODEL": "gpt-4o-mini",
+    }
+    CustomPrompt = True
+
+    def __init__(
+        self,
+        lang_in,
+        lang_out,
+        model,
+        envs=None,
+        prompt=None,
+        ignore_cache=False,
+    ):
+        if _litellm is None:
+            raise ImportError(
+                "litellm is not installed. Install it with: pip install pdf2zh[litellm]"
+            )
+        self.set_envs(envs)
+        if not model:
+            model = self.envs["LITELLM_MODEL"]
+        super().__init__(lang_in, lang_out, model, ignore_cache)
+        self.options = {"temperature": 0}
+        self.prompttext = prompt
+        self.add_cache_impact_parameters("temperature", self.options["temperature"])
+        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+        think_filter_regex = r"^<think>.+?\n*(</think>|\n)*(</think>)\n*"
+        self.add_cache_impact_parameters("think_filter_regex", think_filter_regex)
+        self.think_filter_regex = re.compile(think_filter_regex, flags=re.DOTALL)
+
+    @retry(
+        retry=retry_if_exception_type(_litellm_RateLimitError),
+        stop=stop_after_attempt(100),
+        wait=wait_exponential(multiplier=1, min=1, max=15),
+        before_sleep=lambda retry_state: logger.warning(
+            f"RateLimitError, retrying in {retry_state.next_action.sleep} seconds... "
+            f"(Attempt {retry_state.attempt_number}/100)"
+        ),
+    )
+    def do_translate(self, text) -> str:
+        completion_kwargs = {
+            "model": self.model,
+            "messages": self.prompt(text, self.prompttext),
+            "stream": True,
+            "drop_params": True,
+            **self.options,
+        }
+        response = _litellm.completion(**completion_kwargs)
+        collected = []
+        for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content:
+                collected.append(chunk.choices[0].delta.content)
+        content = "".join(collected).strip()
+        content = self.think_filter_regex.sub("", content).strip()
+        return content
+
+    def get_formular_placeholder(self, id: int):
+        return "{{v" + str(id) + "}}"
+
+    def get_rich_text_left_placeholder(self, id: int):
+        return self.get_formular_placeholder(id)
+
+    def get_rich_text_right_placeholder(self, id: int):
+        return self.get_formular_placeholder(id + 1)
