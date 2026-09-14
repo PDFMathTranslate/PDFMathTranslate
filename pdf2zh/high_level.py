@@ -228,6 +228,7 @@ def _ocr_pages(doc, pages, lang_in, cancellation_event):
         "it": "ita",
         "pt": "por",
         "ru": "rus",
+        "pl": "pol",
     }.get(lang_in.lower(), lang_in or "eng")
     ocr_pages = set()
     tessdata = None
