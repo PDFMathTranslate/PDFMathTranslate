@@ -41,6 +41,7 @@ from pdf2zh.translator import (
     ZhipuTranslator,
     GrokTranslator,
     GroqTranslator,
+    LiteLLMTranslator,
     DeepseekTranslator,
     OpenAIlikedTranslator,
     QwenMtTranslator,
@@ -96,6 +97,7 @@ service_map: dict[str, BaseTranslator] = {
     "OpenAI-liked": OpenAIlikedTranslator,
     "Ali Qwen-Translation": QwenMtTranslator,
     "302.AI": X302AITranslator,
+    "LiteLLM": LiteLLMTranslator,
 }
 
 # The following variables associate strings with specific languages
@@ -427,6 +429,7 @@ def babeldoc_translate_file(**kwargs):
         OpenAIlikedTranslator,
         QwenMtTranslator,
         X302AITranslator,
+        LiteLLMTranslator,
     ]:
         if kwargs["service"] == translator.name:
             translator = translator(
@@ -459,7 +462,9 @@ def babeldoc_translate_file(**kwargs):
             no_mono=False,
             qps=kwargs["thread"],
             use_rich_pbar=False,
-            disable_rich_text_translate=not isinstance(translator, OpenAITranslator),
+            disable_rich_text_translate=not isinstance(
+                translator, (OpenAITranslator, LiteLLMTranslator)
+            ),
             skip_clean=kwargs["skip_subset_fonts"],
             report_interval=0.5,
         )
