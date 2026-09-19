@@ -689,6 +689,35 @@ class X302AITranslator(OpenAITranslator):
         self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
 
 
+class ApiRouteTranslator(OpenAITranslator):
+    # https://www.api-route.com
+    name = "apiroute"
+    envs = {
+        "APIROUTE_API_KEY": None,
+        "APIROUTE_MODEL": "claude-3-7-sonnet-20250219",
+    }
+    CustomPrompt = True
+
+    def __init__(
+        self, lang_in, lang_out, model, envs=None, prompt=None, ignore_cache=False
+    ):
+        self.set_envs(envs)
+        self.base_url = "https://global.api-route.com/v1"
+        api_key = self.envs["APIROUTE_API_KEY"]
+        if not model:
+            model = self.envs["APIROUTE_MODEL"]
+        super().__init__(
+            lang_in,
+            lang_out,
+            model,
+            base_url=self.base_url,
+            api_key=api_key,
+            ignore_cache=ignore_cache,
+        )
+        self.prompttext = prompt
+        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+
+
 class GeminiTranslator(OpenAITranslator):
     # https://ai.google.dev/gemini-api/docs/openai
     name = "gemini"
