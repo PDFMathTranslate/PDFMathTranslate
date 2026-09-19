@@ -1,6 +1,20 @@
 <div align="center">
+	<a href="https://go.warp.dev/PDFMathTranslate" target="_blank">
+		<sup>特别感谢：</sup>
+		<br>
+		<img alt="Warp sponsorship" width="400" src="https://github.com/warpdotdev/brand-assets/blob/main/Github/Sponsor/Warp-Github-LG-02.png">
+		<br>
+		<h>Warp，为多AI代理编码而生</b>
+		<br>
+		<sup>适用于 macOS、Linux 和 Windows</sup>
+	</a>
+</div>
 
-[English](../README.md) | 简体中文 | [繁體中文](README_zh-TW.md) | [日本語](README_ja-JP.md)
+<br>
+
+<div align="center">
+
+[English](../README.md) | 简体中文 | [繁體中文](README_zh-TW.md) | [日本語](README_ja-JP.md) | [한국어](README_ko-KR.md)
 
 <img src="./images/banner.png" width="320px"  alt="PDF2ZH"/>  
 
@@ -12,24 +26,25 @@
     <img src="https://img.shields.io/pypi/v/pdf2zh"/></a>
   <a href="https://pepy.tech/projects/pdf2zh">
     <img src="https://static.pepy.tech/badge/pdf2zh"></a>
-  <a href="https://hub.docker.com/repository/docker/byaidu/pdf2zh">
+  <a href="https://hub.docker.com/r/byaidu/pdf2zh">
     <img src="https://img.shields.io/docker/pulls/byaidu/pdf2zh"></a>
-  <!-- License -->
-  <a href="./LICENSE">
-    <img src="https://img.shields.io/github/license/Byaidu/PDFMathTranslate"/></a>
+  <a href="https://hellogithub.com/repository/8ec2cfd3ef744762bf531232fa32bc47" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=8ec2cfd3ef744762bf531232fa32bc47&claim_uid=JQ0yfeBNjaTuqDU&theme=small" alt="Featured｜HelloGitHub" /></a>
+  <a href="https://gitcode.com/Byaidu/PDFMathTranslate/overview">
+    <img src="https://gitcode.com/Byaidu/PDFMathTranslate/star/badge.svg"></a>
   <a href="https://huggingface.co/spaces/reycn/PDFMathTranslate-Docker">
-    <img src="https://img.shields.io/badge/%F0%9F%A4%97-Online%20Demo-FF9E0D"/></a>
+    <img src="https://img.shields.io/badge/%F0%9F%A4%97-Online%20Demo-FF9E0D"></a>
   <a href="https://www.modelscope.cn/studios/AI-ModelScope/PDFMathTranslate">
     <img src="https://img.shields.io/badge/ModelScope-Demo-blue"></a>
   <a href="https://github.com/Byaidu/PDFMathTranslate/pulls">
-    <img src="https://img.shields.io/badge/contributions-welcome-green"/></a>
-  <a href="https://gitcode.com/Byaidu/PDFMathTranslate/overview">
-    <img src="https://gitcode.com/Byaidu/PDFMathTranslate/star/badge.svg"></a>
+    <img src="https://img.shields.io/badge/contributions-welcome-green"></a>
   <a href="https://t.me/+Z9_SgnxmsmA5NzBl">
-    <img src="https://img.shields.io/badge/Telegram-2CA5E0?style=flat-squeare&logo=telegram&logoColor=white"/></a>
+    <img src="https://img.shields.io/badge/Telegram-2CA5E0?style=flat-squeare&logo=telegram&logoColor=white"></a>
+  <!-- License -->
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/github/license/Byaidu/PDFMathTranslate"></a>
 </p>
 
-<a href="https://trendshift.io/repositories/12424" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12424" alt="Byaidu%2FPDFMathTranslate | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/19816" target="_blank"><img src="https://trendshift.io/api/badge/repositories/19816" alt="PDFMathTranslate%2FPDFMathTranslate | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 </div>
 
@@ -45,16 +60,19 @@
 
 <h2 id="updates">更新</h2>
 
-
 - [2026年3月23日] 实验性支持 v2.0 翻译内核，使用隔离环境运行（`--mode precise`）。（由[@reycn](https://github.com/reycn) 提交）
-
 - [2026年3月22日] 支持 MiniMax（由[@octo-patch](https://github.com/octo-patch) 提交的PR）
-
 - [2026年3月22日] 修复与 OpenAI 相关的问题（由[@samqin123](https://github.com/samqin123) 提交的PR）
-
 - [2026年3月22日] 修复与 HTTP 相关的问题（由[@soukouki](https://github.com/soukouki) 提交的PR）
-
 - [2026年3月22日] 在 mac 和 OONX 平台上加快模型加载速度，GUI 启动，版本打印和持续集成。（由[@reycn](https://github.com/reycn) 提交）
+
+> [!NOTE]
+>
+> 2.0 版本已迁移至组织下的新仓库：[PDFMathTranslate/PDFMathTranslate-next](https://github.com/PDFMathTranslate/PDFMathTranslate-next)
+> 
+> 2.0 版本已正式发布。
+
+- [2025 年 5 月 9 日] pdf2zh 2.0 预览版 [#586](https://github.com/Byaidu/PDFMathTranslate/issues/586)：Windows ZIP 文件和 Docker 镜像现已可用。
 - [2025 年 2 月 22 日] 更好的发布 CI 和精心打包的 windows-amd64 exe (由 [@awwaawwa](https://github.com/awwaawwa) 提供)
 - [2024 年 12 月 24 日] 翻译器现在支持在 [Xinference](https://github.com/xorbitsai/inference) 上使用本地模型 _(由 [@imClumsyPanda](https://github.com/imClumsyPanda) 提供)_
 
