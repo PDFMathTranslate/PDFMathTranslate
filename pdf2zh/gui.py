@@ -6,6 +6,7 @@ import socket
 import uuid
 from asyncio import CancelledError
 from pathlib import Path
+from urllib.parse import urljoin
 import typing as T
 
 import gradio as gr
@@ -16,7 +17,7 @@ from string import Template
 import logging
 
 from pdf2zh import __version__
-from pdf2zh.high_level import translate
+from pdf2zh.high_level import translate, assert_public_http_url
 from pdf2zh.doclayout import ModelInstance
 from pdf2zh.config import ConfigManager
 from pdf2zh.translator import (
@@ -183,7 +184,22 @@ def download_with_limit(url: str, save_path: str, size_limit: int) -> str:
     """
     chunk_size = 1024
     total_size = 0
-    with requests.get(url, stream=True, timeout=10) as response:
+    # Re-validate every redirect hop so a public URL cannot redirect the
+    # server-side fetch to an internal address (SSRF).
+    for _ in range(6):
+        assert_public_http_url(url)
+        response = requests.get(url, stream=True, timeout=10, allow_redirects=False)
+        if response.is_redirect or response.is_permanent_redirect:
+            location = response.headers.get("Location")
+            response.close()
+            if not location:
+                raise gr.Error("Invalid redirect from URL")
+            url = urljoin(url, location)
+            continue
+        break
+    else:
+        raise gr.Error("Too many redirects")
+    with response:
         response.raise_for_status()
         content = response.headers.get("Content-Disposition")
         try:  # filename from header

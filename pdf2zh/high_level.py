@@ -2,8 +2,10 @@
 
 import asyncio
 import io
+import ipaddress
 import os
 import re
+import socket
 import sys
 import tempfile
 import logging
@@ -11,6 +13,7 @@ from asyncio import CancelledError
 from pathlib import Path
 from string import Template
 from typing import Any, BinaryIO, List, Optional, Dict
+from urllib.parse import urljoin, urlparse
 
 import numpy as np
 import requests
@@ -34,6 +37,54 @@ from babeldoc.assets.assets import get_font_and_metadata
 NOTO_NAME = "noto"
 
 logger = logging.getLogger(__name__)
+
+_MAX_URL_REDIRECTS = 5
+
+
+def assert_public_http_url(url: str) -> None:
+    """Reject non-http(s) URLs and URLs resolving to a non-public address.
+
+    pdf2zh fetches user-supplied URLs server-side (translating a document from a
+    link). Without this check that is a server-side request forgery primitive:
+    a caller can target loopback, private-range, link-local (cloud metadata),
+    or other internal addresses. Every address the host resolves to must be
+    global.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise PDFValueError("Only http/https URLs are allowed")
+    host = parsed.hostname
+    if not host:
+        raise PDFValueError("Invalid URL")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        addrinfo = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as e:
+        raise PDFValueError("Could not resolve URL host") from e
+    for _family, _type, _proto, _canon, sockaddr in addrinfo:
+        ip = ipaddress.ip_address(sockaddr[0])
+        mapped = getattr(ip, "ipv4_mapped", None)
+        if mapped is not None:
+            ip = mapped
+        if not ip.is_global or ip.is_reserved:
+            raise PDFValueError("URL host resolves to a non-public address")
+
+
+def fetch_public_url(url: str, **kwargs) -> requests.Response:
+    """GET *url* with SSRF protection, re-validating every redirect hop."""
+    for _ in range(_MAX_URL_REDIRECTS + 1):
+        assert_public_http_url(url)
+        response = requests.get(url, allow_redirects=False, **kwargs)
+        if response.is_redirect or response.is_permanent_redirect:
+            location = response.headers.get("Location")
+            response.close()
+            if not location:
+                raise PDFValueError("Invalid redirect from URL")
+            url = urljoin(url, location)
+            continue
+        return response
+    raise PDFValueError("Too many redirects")
+
 
 noto_list = [
     "am",  # Amharic
@@ -445,7 +496,7 @@ def translate(
         ):
             print("Online files detected, downloading...")
             try:
-                r = requests.get(file, allow_redirects=True)
+                r = fetch_public_url(file)
                 if r.status_code == 200:
                     with tempfile.NamedTemporaryFile(
                         suffix=".pdf", delete=False
