@@ -165,6 +165,8 @@ pip install pdf2zh
   <img src="https://sealos.io/Deploy-on-Sealos.svg" alt="在 Sealos 上部署" height="26"></a>
 <a href="https://app.koyeb.com/deploy?type=git&builder=buildpack&repository=github.com/Byaidu/PDFMathTranslate&branch=main&name=pdf-math-translate">
   <img src="https://www.koyeb.com/static/images/deploy/button.svg" alt="部署到 Koyeb" height="26"></a>
+<a href="https://zop.dev/zopday/app/deploy?image=byaidu/pdf2zh&port=7860">
+  <img src="https://zop.dev/deploytozopday-inkhard.svg" alt="在 ZopDay 上部署" height="26"></a>
 </div>
 
 </details>
