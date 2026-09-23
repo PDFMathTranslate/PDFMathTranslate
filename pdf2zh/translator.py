@@ -622,10 +622,21 @@ class ZhipuTranslator(OpenAITranslator):
                 messages=self.prompt(text, self.prompttext),
             )
         except openai.BadRequestError as e:
-            if (
-                json.loads(response.choices[0].message.content.strip())["error"]["code"]
-                == "1301"
-            ):
+            # Parse error code from the exception, not from `response`
+            code = None
+            try:
+                body = e.body
+                if isinstance(body, str):
+                    body = json.loads(body)
+                if isinstance(body, dict):
+                    err = body.get("error")
+                    if isinstance(err, dict):
+                        code = err.get("code")
+                    if code is None:
+                        code = body.get("code")
+            except Exception:
+                code = None
+            if code is not None and str(code) == "1301":
                 return "IRREPARABLE TRANSLATION ERROR"
             raise e
         return response.choices[0].message.content.strip()
