@@ -2,11 +2,17 @@ import unittest
 from textwrap import dedent
 from unittest import mock
 
+import openai
 from ollama import ResponseError as OllamaResponseError
 
 from pdf2zh import cache
 from pdf2zh.config import ConfigManager
-from pdf2zh.translator import BaseTranslator, OllamaTranslator, OpenAIlikedTranslator
+from pdf2zh.translator import (
+    BaseTranslator,
+    OllamaTranslator,
+    OpenAIlikedTranslator,
+    ZhipuTranslator,
+)
 
 # Since it is necessary to test whether the functionality meets the expected requirements,
 # private functions and private methods are allowed to be called.
@@ -218,6 +224,32 @@ class TestOllamaTranslator(unittest.TestCase):
         self.assertEqual(
             excepted_not_retain_cot_content, only_removed_cot_content.strip()
         )
+
+
+class TestZhipuTranslator(unittest.TestCase):
+    def setUp(self):
+        self.translator = ZhipuTranslator(
+            "en",
+            "zh",
+            None,
+            envs={"ZHIPU_API_KEY": "test-key", "ZHIPU_MODEL": "glm-4-flash"},
+        )
+
+    def _raise_bad_request(self, body):
+        err = openai.BadRequestError.__new__(openai.BadRequestError)
+        err.body = body
+        err.response = None
+        self.translator.client.chat.completions.create = mock.Mock(side_effect=err)
+
+    def test_error_code_1301_returns_irreparable(self):
+        self._raise_bad_request({"error": {"code": "1301"}})
+        result = self.translator.do_translate("hello")
+        self.assertEqual(result, "IRREPARABLE TRANSLATION ERROR")
+
+    def test_other_error_is_re_raised(self):
+        self._raise_bad_request({"error": {"code": "400"}})
+        with self.assertRaises(openai.BadRequestError):
+            self.translator.do_translate("hello")
 
 
 if __name__ == "__main__":
