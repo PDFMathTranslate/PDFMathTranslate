@@ -1,12 +1,22 @@
+import importlib
+import typing
 import unittest
 from textwrap import dedent
 from unittest import mock
 
+import openai
 from ollama import ResponseError as OllamaResponseError
+from tenacity import RetryError, wait_exponential
 
 from pdf2zh import cache
 from pdf2zh.config import ConfigManager
-from pdf2zh.translator import BaseTranslator, OllamaTranslator, OpenAIlikedTranslator
+from pdf2zh.translator import (
+    BaseTranslator,
+    ModelScopeTranslator,
+    OllamaTranslator,
+    OpenAITranslator,
+    OpenAIlikedTranslator,
+)
 
 # Since it is necessary to test whether the functionality meets the expected requirements,
 # private functions and private methods are allowed to be called.
@@ -218,6 +228,195 @@ class TestOllamaTranslator(unittest.TestCase):
         self.assertEqual(
             excepted_not_retain_cot_content, only_removed_cot_content.strip()
         )
+
+
+# Synthetic endpoint only. Tests mock the SDK call and never connect.
+_OPENAI_BASE_URL = "https://example.invalid/v1"
+_OPENAI_ENVS = {
+    "OPENAI_BASE_URL": _OPENAI_BASE_URL,
+    "OPENAI_API_KEY": "test-key",
+    "OPENAI_MODEL": "gpt-4o-mini",
+    "OPENAI_STREAM": "true",
+    "OPENAI_STOP_TOKENS": "",
+    "OPENAI_MAX_TOKENS": "-1",
+}
+_ATTEMPT_BUDGET = 100
+
+
+class _AttemptOverflow(BaseException):
+    """Fail-fast sentinel once call 101 starts.
+
+    The pre-fix paragraph worker retries every Exception without a stop
+    condition. A BaseException still aborts that loop, so an exhausted-budget
+    regression fails instead of hanging.
+    """
+
+
+def _http_for_openai_errors():
+    """HTTP client module that matches the installed OpenAI SDK response type."""
+    response_type = typing.get_type_hints(openai.APIStatusError.__init__)["response"]
+    candidates = [
+        arg for arg in typing.get_args(response_type) if arg is not type(None)
+    ]
+    if candidates:
+        response_type = candidates[0]
+    return importlib.import_module(response_type.__module__.split(".")[0])
+
+
+def _rate_limit_error(message):
+    body = {
+        "error": {
+            "message": message,
+            "type": "tokens",
+            "code": "rate_limit_exceeded",
+        }
+    }
+    http = _http_for_openai_errors()
+    request = http.Request("POST", _OPENAI_BASE_URL + "/chat/completions")
+    response = http.Response(429, request=request, json=body)
+    return openai.RateLimitError(message, response=response, body=body)
+
+
+def _non_stream_response(text):
+    message = mock.Mock()
+    message.content = text
+    choice = mock.Mock()
+    choice.message = message
+    response = mock.Mock()
+    response.choices = [choice]
+    return response
+
+
+def _stream_response(*parts):
+    chunks = []
+    for part in parts:
+        delta = mock.Mock()
+        delta.content = part
+        choice = mock.Mock()
+        choice.delta = delta
+        chunk = mock.Mock()
+        chunk.choices = [choice]
+        chunks.append(chunk)
+    return chunks
+
+
+class TestOpenAITranslator(unittest.TestCase):
+    def setUp(self):
+        self.test_db = cache.init_test_db()
+        self._config_patches = (
+            mock.patch.object(
+                ConfigManager, "get_translator_by_name", return_value=None
+            ),
+            mock.patch.object(ConfigManager, "set_translator_by_name"),
+        )
+        for patcher in self._config_patches:
+            patcher.start()
+
+    def tearDown(self):
+        for patcher in reversed(self._config_patches):
+            patcher.stop()
+        cache.clean_test_db(self.test_db)
+
+    def _translator(self, stream="true"):
+        envs = dict(_OPENAI_ENVS)
+        envs["OPENAI_STREAM"] = stream
+        return OpenAITranslator(
+            lang_in="en",
+            lang_out="zh",
+            model="gpt-4o-mini",
+            base_url=_OPENAI_BASE_URL,
+            api_key="test-key",
+            envs=envs,
+            ignore_cache=False,
+        )
+
+    def _assert_request(self, translator, create, text, stream):
+        create.assert_called_once()
+        kwargs = create.call_args.kwargs
+        self.assertEqual(
+            kwargs,
+            {
+                "model": "gpt-4o-mini",
+                "temperature": 0,
+                "messages": translator.prompt(text, translator.prompttext),
+                "stream": stream,
+            },
+        )
+        self.assertIn(text, kwargs["messages"][0]["content"])
+
+    def test_streaming_success_preserves_request(self):
+        translator = self._translator("true")
+        text = "Hello World"
+        translated = "translated text"
+        with mock.patch.object(
+            translator.client.chat.completions,
+            "create",
+            return_value=_stream_response("translated ", "text"),
+        ) as create:
+            self.assertEqual(translator.do_translate(text), translated)
+        self._assert_request(translator, create, text, True)
+        self.assertTrue(translator.stream)
+
+    def test_non_streaming_success_preserves_request(self):
+        translator = self._translator("false")
+        text = "Hello World"
+        translated = "translated text"
+        with mock.patch.object(
+            translator.client.chat.completions,
+            "create",
+            return_value=_non_stream_response(translated),
+        ) as create:
+            self.assertEqual(translator.do_translate(text), translated)
+        self._assert_request(translator, create, text, False)
+        self.assertFalse(translator.stream)
+
+    @mock.patch("tenacity.nap.time.sleep", return_value=None)
+    def test_rate_limit_retries_then_succeeds(self, sleep):
+        translator = self._translator("false")
+        text = "Hello World"
+        translated = "translated text"
+        error = _rate_limit_error("rate limit exceeded")
+        create = mock.Mock(side_effect=[error, _non_stream_response(translated)])
+        with mock.patch.object(translator.client.chat.completions, "create", create):
+            self.assertEqual(translator.do_translate(text), translated)
+        self.assertEqual(create.call_count, 2)
+        self.assertEqual(sleep.call_count, 1)
+        self.assertEqual(sleep.call_args.args[0], 1)
+        waited = OpenAITranslator.do_translate.retry.wait
+        self.assertIsInstance(waited, wait_exponential)
+        self.assertEqual(waited.multiplier, 1)
+        self.assertEqual(waited.min, 1)
+        self.assertEqual(waited.max, 15)
+
+    @mock.patch("tenacity.nap.time.sleep", return_value=None)
+    def test_rate_limit_exhaustion_reraises_original_error(self, sleep):
+        retrying = OpenAITranslator.do_translate.retry
+        self.assertEqual(retrying.stop.max_attempt_number, _ATTEMPT_BUDGET)
+        self.assertTrue(retrying.reraise)
+        self.assertIs(ModelScopeTranslator.do_translate, OpenAITranslator.do_translate)
+
+        translator = self._translator("false")
+        errors = []
+
+        def create(*args, **kwargs):
+            attempt = len(errors) + 1
+            if attempt > _ATTEMPT_BUDGET:
+                raise _AttemptOverflow(attempt)
+            error = _rate_limit_error(f"rate limit {attempt}")
+            errors.append(error)
+            raise error
+
+        with mock.patch.object(
+            translator.client.chat.completions, "create", side_effect=create
+        ):
+            with self.assertRaises(openai.RateLimitError) as caught:
+                translator.do_translate("Hello World")
+
+        self.assertEqual(len(errors), _ATTEMPT_BUDGET)
+        self.assertIs(caught.exception, errors[-1])
+        self.assertEqual(caught.exception.status_code, 429)
+        self.assertNotIsInstance(caught.exception, RetryError)
+        self.assertEqual(sleep.call_count, _ATTEMPT_BUDGET - 1)
 
 
 if __name__ == "__main__":

@@ -464,6 +464,7 @@ class OpenAITranslator(BaseTranslator):
         retry=retry_if_exception_type(openai.RateLimitError),
         stop=stop_after_attempt(100),
         wait=wait_exponential(multiplier=1, min=1, max=15),
+        reraise=True,
         before_sleep=lambda retry_state: logger.warning(
             f"RateLimitError, retrying in {retry_state.next_action.sleep} seconds... "
             f"(Attempt {retry_state.attempt_number}/100)"
