@@ -1,5 +1,6 @@
 import concurrent.futures
 import logging
+import os
 import re
 import unicodedata
 from enum import Enum
@@ -13,7 +14,7 @@ from pdfminer.pdffont import PDFCIDFont, PDFUnicodeNotDefined
 from pdfminer.pdfinterp import PDFGraphicState, PDFResourceManager
 from pdfminer.utils import apply_matrix_pt, mult_matrix
 from pymupdf import Font
-from tenacity import retry, wait_fixed
+from tenacity import retry, wait_fixed, stop_after_attempt
 
 from pdf2zh.translator import (
     AnythingLLMTranslator,
@@ -345,7 +346,15 @@ class TranslateConverter(PDFConverterEx):
         # B. 段落翻译
         log.debug("\n==========[SSTACK]==========\n")
 
-        @retry(wait=wait_fixed(1))
+        # 重试次数上限,避免某段落持续失败导致整篇无限重试卡死;
+        # 用尽后由 retry_error_callback 回退为原文,保证整篇仍能产出
+        max_attempts = int(os.environ.get("PDF2ZH_TRANSLATE_RETRIES", "5"))
+
+        @retry(
+            wait=wait_fixed(1),
+            stop=stop_after_attempt(max_attempts),
+            retry_error_callback=lambda retry_state: retry_state.args[0],
+        )
         def worker(s: str):  # 多线程翻译
             if not s.strip() or re.match(r"^\{v\d+\}$", s):  # 空白和公式不翻译
                 return s

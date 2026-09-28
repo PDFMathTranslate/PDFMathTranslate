@@ -447,6 +447,9 @@ class OpenAITranslator(BaseTranslator):
         self.client = openai.OpenAI(
             base_url=base_url or self.envs["OPENAI_BASE_URL"],
             api_key=api_key or self.envs["OPENAI_API_KEY"],
+            # 防止单个请求静默挂起导致整篇卡死;超时后由上层重试自愈
+            timeout=float(os.environ.get("PDF2ZH_OPENAI_TIMEOUT", "120")),
+            max_retries=2,
         )
         self.prompttext = prompt
         self.add_cache_impact_parameters("temperature", self.options["temperature"])
