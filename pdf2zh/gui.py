@@ -310,8 +310,13 @@ def translate_file(
     lang_to = lang_map[lang_to]
 
     _envs = {}
+    saved_envs = ConfigManager.get_translator_by_name(translator.name) or {}
     for i, env in enumerate(translator.envs.items()):
-        _envs[env[0]] = envs[i]
+        key, default_value = env
+        if i < len(envs):
+            _envs[key] = envs[i]
+        else:
+            _envs[key] = saved_envs.get(key, default_value)
     for k, v in _envs.items():
         if str(k).upper().endswith("API_KEY") and str(v) == "***":
             # Load Real API_KEYs from local configure file
@@ -562,6 +567,7 @@ tech_details_string = f"""
                     - BabelDOC Version: {babeldoc_version}
                 """
 cancellation_event_map = {}
+VISIBLE_ENV_INPUT_COUNT = 3
 
 
 # The following code creates the GUI
@@ -604,7 +610,7 @@ with gr.Blocks(
                 value=enabled_services[0],
             )
             envs = []
-            for i in range(3):
+            for i in range(VISIBLE_ENV_INPUT_COUNT):
                 envs.append(
                     gr.Textbox(
                         visible=False,
@@ -664,9 +670,11 @@ with gr.Blocks(
             def on_select_service(service, evt: gr.EventData):
                 translator = service_map[service]
                 _envs = []
-                for i in range(4):
+                for i in range(VISIBLE_ENV_INPUT_COUNT + 1):
                     _envs.append(gr.update(visible=False, value=""))
-                for i, env in enumerate(translator.envs.items()):
+                for i, env in enumerate(
+                    list(translator.envs.items())[:VISIBLE_ENV_INPUT_COUNT]
+                ):
                     label = env[0]
                     value = ConfigManager.get_env_by_translatername(
                         translator, env[0], env[1]
