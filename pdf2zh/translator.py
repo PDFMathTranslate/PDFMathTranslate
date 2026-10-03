@@ -1033,7 +1033,10 @@ class MiniMaxTranslator(OpenAITranslator):
     name = "minimax"
     envs = {
         "MINIMAX_API_KEY": None,
-        "MINIMAX_MODEL": "MiniMax-M2.7",
+        "MINIMAX_MODEL": "MiniMax-M3",
+        # Configurable base URL. Defaults to the global endpoint; set to
+        # "https://api.minimaxi.com/v1" to use the China endpoint.
+        "MINIMAX_BASE_URL": "https://api.minimax.io/v1",
     }
     CustomPrompt = True
 
@@ -1041,7 +1044,7 @@ class MiniMaxTranslator(OpenAITranslator):
         self, lang_in, lang_out, model, envs=None, prompt=None, ignore_cache=False
     ):
         self.set_envs(envs)
-        base_url = "https://api.minimax.io/v1"
+        base_url = self.envs.get("MINIMAX_BASE_URL", "https://api.minimax.io/v1")
         api_key = self.envs["MINIMAX_API_KEY"]
         if not model:
             model = self.envs["MINIMAX_MODEL"]
