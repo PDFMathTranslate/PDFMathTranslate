@@ -788,23 +788,39 @@ class TencentTranslator(BaseTranslator):
         resp: TextTranslateResponse = self.client.TextTranslate(self.req)
         return resp.TargetText
 
-    def do_translate(self, text):
-        if len(text) <= self._MAX_CHARS:
-            return self._translate_chunk(text)
+    @staticmethod
+    def _split_chunks(text, max_chars=5000):
+        """Split ``text`` into chunks of at most ``max_chars`` characters.
 
-        # Split on newlines, keeping the delimiter
+        Lines are kept intact where possible, but an individual line longer than
+        ``max_chars`` (e.g. a very long paragraph without line breaks) is split
+        into fixed-size pieces so no chunk ever exceeds the API limit.
+        """
         chunks = []
         current = ""
         for line in text.splitlines(keepends=True):
-            if len(current) + len(line) > self._MAX_CHARS and current:
+            if len(line) > max_chars:
+                # A single line already exceeds the limit: flush the pending
+                # chunk and split the line itself into fixed-size pieces.
+                if current:
+                    chunks.append(current)
+                    current = ""
+                chunks.extend(
+                    line[i : i + max_chars] for i in range(0, len(line), max_chars)
+                )
+            elif len(current) + len(line) > max_chars and current:
                 chunks.append(current)
                 current = line
             else:
                 current += line
         if current:
             chunks.append(current)
+        return chunks
 
-        return "".join(self._translate_chunk(c) for c in chunks)
+    def do_translate(self, text):
+        if len(text) <= self._MAX_CHARS:
+            return self._translate_chunk(text)
+        return "".join(self._translate_chunk(c) for c in self._split_chunks(text))
 
 
 class AnythingLLMTranslator(BaseTranslator):
