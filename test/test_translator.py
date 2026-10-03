@@ -6,7 +6,12 @@ from ollama import ResponseError as OllamaResponseError
 
 from pdf2zh import cache
 from pdf2zh.config import ConfigManager
-from pdf2zh.translator import BaseTranslator, OllamaTranslator, OpenAIlikedTranslator
+from pdf2zh.translator import (
+    BaseTranslator,
+    OllamaTranslator,
+    OpenAIlikedTranslator,
+    QwenMtTranslator,
+)
 
 # Since it is necessary to test whether the functionality meets the expected requirements,
 # private functions and private methods are allowed to be called.
@@ -218,6 +223,16 @@ class TestOllamaTranslator(unittest.TestCase):
         self.assertEqual(
             excepted_not_retain_cot_content, only_removed_cot_content.strip()
         )
+
+
+class TestQwenMtTranslator(unittest.TestCase):
+    def test_lang_mapping(self):
+        # Simplified Chinese can be passed as either "zh" or "zh-CN"
+        self.assertEqual(QwenMtTranslator.lang_mapping("zh"), "Chinese")
+        self.assertEqual(QwenMtTranslator.lang_mapping("zh-CN"), "Chinese")
+        self.assertEqual(QwenMtTranslator.lang_mapping("zh-TW"), "Chinese")
+        self.assertEqual(QwenMtTranslator.lang_mapping("en"), "English")
+        self.assertEqual(QwenMtTranslator.lang_mapping("ja"), "Japanese")
 
 
 if __name__ == "__main__":
