@@ -879,14 +879,10 @@ def setup_gui(
         demo.launch(server_name="0.0.0.0", max_file_size="5mb", inbrowser=True)
         return
 
-    # Try binding addresses in order: "::" accepts both IPv4+IPv6 on most
-    # dual-stack systems, "0.0.0.0" is IPv4-only, "127.0.0.1" is loopback,
-    # and finally fall back to Gradio's share mode.
-    bind_addresses = []
+    # Try IPv4 before IPv6 so Gradio's local startup requests avoid [::].
+    bind_addresses = ["0.0.0.0", "127.0.0.1"]
     if _has_ipv6():
         bind_addresses.append("[::]")
-    bind_addresses.append("0.0.0.0")
-    bind_addresses.append("127.0.0.1")
 
     for addr in bind_addresses:
         try:
