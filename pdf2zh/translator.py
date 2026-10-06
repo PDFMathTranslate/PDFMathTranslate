@@ -548,6 +548,8 @@ class AzureOpenAITranslator(BaseTranslator):
             **self.options,
             messages=self.prompt(text, self.prompttext),
         )
+        if not response.choices or response.choices[0].message is None:
+            raise ValueError("LLM returned empty or filtered response")
         return response.choices[0].message.content.strip()
 
 
@@ -624,12 +626,16 @@ class ZhipuTranslator(OpenAITranslator):
                 messages=self.prompt(text, self.prompttext),
             )
         except openai.BadRequestError as e:
+            if not response.choices or response.choices[0].message is None:
+                raise ValueError("LLM returned empty or filtered response") from e
             if (
                 json.loads(response.choices[0].message.content.strip())["error"]["code"]
                 == "1301"
             ):
                 return "IRREPARABLE TRANSLATION ERROR"
             raise e
+        if not response.choices or response.choices[0].message is None:
+            raise ValueError("LLM returned empty or filtered response")
         return response.choices[0].message.content.strip()
 
 
@@ -1197,4 +1203,6 @@ class QwenMtTranslator(OpenAITranslator):
             messages=[{"role": "user", "content": text}],
             extra_body={"translation_options": translation_options},
         )
+        if not response.choices or response.choices[0].message is None:
+            raise ValueError("LLM returned empty or filtered response")
         return response.choices[0].message.content.strip()
