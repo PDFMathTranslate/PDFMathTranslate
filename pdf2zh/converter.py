@@ -8,13 +8,20 @@ from string import Template
 from typing import Dict
 
 import numpy as np
+from openai import RateLimitError
 from pdfminer.converter import PDFConverter
 from pdfminer.layout import LTChar, LTFigure, LTLine, LTPage
 from pdfminer.pdffont import PDFCIDFont, PDFUnicodeNotDefined
 from pdfminer.pdfinterp import PDFGraphicState, PDFResourceManager
 from pdfminer.utils import apply_matrix_pt, mult_matrix
 from pymupdf import Font
-from tenacity import retry, wait_fixed
+from tenacity import (
+    retry,
+    retry_all,
+    retry_if_exception_type,
+    retry_if_not_exception_type,
+    wait_fixed,
+)
 
 from pdf2zh.text_spacing import add_cjk_latin_spacing
 from pdf2zh.translator import (
@@ -351,7 +358,15 @@ class TranslateConverter(PDFConverterEx):
         # B. 段落翻译
         log.debug("\n==========[SSTACK]==========\n")
 
-        @retry(wait=wait_fixed(1))
+        # Ordinary failures stay retryable. RateLimitError is excluded so an
+        # exhausted OpenAITranslator budget is not restarted forever.
+        @retry(
+            wait=wait_fixed(1),
+            retry=retry_all(
+                retry_if_exception_type(Exception),
+                retry_if_not_exception_type(RateLimitError),
+            ),
+        )
         def worker(s: str):  # 多线程翻译
             if not s.strip() or re.match(r"^\{v\d+\}$", s):  # 空白和公式不翻译
                 return s
