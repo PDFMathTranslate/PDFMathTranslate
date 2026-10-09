@@ -6,7 +6,12 @@ from ollama import ResponseError as OllamaResponseError
 
 from pdf2zh import cache
 from pdf2zh.config import ConfigManager
-from pdf2zh.translator import BaseTranslator, OllamaTranslator, OpenAIlikedTranslator
+from pdf2zh.translator import (
+    BaseTranslator,
+    OllamaTranslator,
+    OpenAIlikedTranslator,
+    ApiRouteTranslator,
+)
 
 # Since it is necessary to test whether the functionality meets the expected requirements,
 # private functions and private methods are allowed to be called.
@@ -150,6 +155,43 @@ class TestOpenAIlikedTranslator(unittest.TestCase):
             self.default_envs["OPENAILIKED_BASE_URL"],
         )
         self.assertIsNone(translator.envs["OPENAILIKED_API_KEY"])
+
+
+class TestApiRouteTranslator(unittest.TestCase):
+    def test_default_initialization(self):
+        """测试使用默认配置初始化 API Route 翻译器"""
+        ConfigManager.clear()
+        envs = {"APIROUTE_API_KEY": "test_key"}
+        translator = ApiRouteTranslator(
+            lang_in="en", lang_out="zh", model=None, envs=envs
+        )
+        self.assertEqual(translator.name, "apiroute")
+        self.assertEqual(translator.base_url, "https://global.api-route.com/v1")
+        self.assertEqual(translator.envs["APIROUTE_API_KEY"], "test_key")
+        self.assertEqual(translator.model, "claude-3-7-sonnet-20250219")
+
+    def test_custom_model_initialization(self):
+        """测试指定自定义模型初始化"""
+        ConfigManager.clear()
+        envs = {"APIROUTE_API_KEY": "test_key"}
+        translator = ApiRouteTranslator(
+            lang_in="en", lang_out="zh", model="gpt-4o", envs=envs
+        )
+        self.assertEqual(translator.base_url, "https://global.api-route.com/v1")
+        self.assertEqual(translator.model, "gpt-4o")
+
+    def test_env_model_initialization(self):
+        """测试通过环境变量配置模型"""
+        ConfigManager.clear()
+        envs = {
+            "APIROUTE_API_KEY": "test_key",
+            "APIROUTE_MODEL": "deepseek-chat",
+        }
+        translator = ApiRouteTranslator(
+            lang_in="en", lang_out="zh", model=None, envs=envs
+        )
+        self.assertEqual(translator.base_url, "https://global.api-route.com/v1")
+        self.assertEqual(translator.model, "deepseek-chat")
 
 
 class TestOllamaTranslator(unittest.TestCase):
