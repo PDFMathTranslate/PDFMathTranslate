@@ -21,6 +21,7 @@ from pdf2zh.doclayout import ModelInstance
 from pdf2zh.config import ConfigManager
 from pdf2zh.translator import (
     AnythingLLMTranslator,
+    AtlasCloudTranslator,
     AzureOpenAITranslator,
     AzureTranslator,
     BaseTranslator,
@@ -93,6 +94,7 @@ service_map: dict[str, BaseTranslator] = {
     "Groq": GroqTranslator,
     "DeepSeek": DeepseekTranslator,
     "MiniMax": MiniMaxTranslator,
+    "Atlas Cloud": AtlasCloudTranslator,
     "OpenAI-liked": OpenAIlikedTranslator,
     "Ali Qwen-Translation": QwenMtTranslator,
     "302.AI": X302AITranslator,
@@ -424,6 +426,7 @@ def babeldoc_translate_file(**kwargs):
         GrokTranslator,
         GroqTranslator,
         DeepseekTranslator,
+        AtlasCloudTranslator,
         OpenAIlikedTranslator,
         QwenMtTranslator,
         X302AITranslator,
