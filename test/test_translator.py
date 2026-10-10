@@ -6,7 +6,12 @@ from ollama import ResponseError as OllamaResponseError
 
 from pdf2zh import cache
 from pdf2zh.config import ConfigManager
-from pdf2zh.translator import BaseTranslator, OllamaTranslator, OpenAIlikedTranslator
+from pdf2zh.translator import (
+    BaseTranslator,
+    MiniMaxTranslator,
+    OllamaTranslator,
+    OpenAIlikedTranslator,
+)
 
 # Since it is necessary to test whether the functionality meets the expected requirements,
 # private functions and private methods are allowed to be called.
@@ -150,6 +155,44 @@ class TestOpenAIlikedTranslator(unittest.TestCase):
             self.default_envs["OPENAILIKED_BASE_URL"],
         )
         self.assertIsNone(translator.envs["OPENAILIKED_API_KEY"])
+
+
+class TestMiniMaxTranslator(unittest.TestCase):
+    def setUp(self) -> None:
+        self.api_key_envs = {"MINIMAX_API_KEY": "test_api_key"}
+
+    def test_default_model_and_endpoint(self):
+        """The default model is MiniMax-M3 on the global endpoint."""
+        ConfigManager.clear()
+        translator = MiniMaxTranslator(
+            lang_in="en", lang_out="zh", model=None, envs=self.api_key_envs
+        )
+        self.assertEqual(translator.model, "MiniMax-M3")
+        self.assertEqual(
+            str(translator.client.base_url).rstrip("/"),
+            "https://api.minimax.io/v1",
+        )
+
+    def test_previous_model_selectable(self):
+        """The previous MiniMax-M2.7 model can still be selected explicitly."""
+        ConfigManager.clear()
+        envs = {**self.api_key_envs, "MINIMAX_MODEL": "MiniMax-M2.7"}
+        translator = MiniMaxTranslator(
+            lang_in="en", lang_out="zh", model=None, envs=envs
+        )
+        self.assertEqual(translator.model, "MiniMax-M2.7")
+
+    def test_china_endpoint_selectable(self):
+        """The China endpoint can be selected via MINIMAX_BASE_URL."""
+        ConfigManager.clear()
+        envs = {**self.api_key_envs, "MINIMAX_BASE_URL": "https://api.minimaxi.com/v1"}
+        translator = MiniMaxTranslator(
+            lang_in="en", lang_out="zh", model=None, envs=envs
+        )
+        self.assertEqual(
+            str(translator.client.base_url).rstrip("/"),
+            "https://api.minimaxi.com/v1",
+        )
 
 
 class TestOllamaTranslator(unittest.TestCase):
