@@ -6,7 +6,12 @@ from ollama import ResponseError as OllamaResponseError
 
 from pdf2zh import cache
 from pdf2zh.config import ConfigManager
-from pdf2zh.translator import BaseTranslator, OllamaTranslator, OpenAIlikedTranslator
+from pdf2zh.translator import (
+    BaseTranslator,
+    OllamaTranslator,
+    OpenAIlikedTranslator,
+    TencentTranslator,
+)
 
 # Since it is necessary to test whether the functionality meets the expected requirements,
 # private functions and private methods are allowed to be called.
@@ -218,6 +223,39 @@ class TestOllamaTranslator(unittest.TestCase):
         self.assertEqual(
             excepted_not_retain_cot_content, only_removed_cot_content.strip()
         )
+
+
+class TestTencentTranslator(unittest.TestCase):
+    def test_split_chunks_single_short_chunk(self):
+        text = "line one\nline two\nline three"
+        self.assertEqual(TencentTranslator._split_chunks(text), [text])
+
+    def test_split_chunks_groups_lines_up_to_limit(self):
+        line = "x" * 3000 + "\n"
+        text = line * 3
+        chunks = TencentTranslator._split_chunks(text)
+        self.assertTrue(all(len(c) <= 5000 for c in chunks))
+        self.assertEqual("".join(chunks), text)
+        self.assertEqual(chunks, [line, line, line])
+
+    def test_split_chunks_splits_single_long_line(self):
+        # A single line longer than the limit used to be sent as one oversized
+        # chunk, exceeding the Tencent API's request size limit.
+        long_line = "y" * 12000
+        chunks = TencentTranslator._split_chunks(long_line)
+        self.assertEqual("".join(chunks), long_line)
+        self.assertTrue(all(len(c) <= 5000 for c in chunks))
+        self.assertEqual(chunks, ["y" * 5000, "y" * 5000, "y" * 2000])
+
+    def test_split_chunks_long_line_with_other_lines(self):
+        text = "head\n" + "z" * 6000 + "\ntail"
+        chunks = TencentTranslator._split_chunks(text)
+        self.assertEqual("".join(chunks), text)
+        self.assertTrue(all(len(c) <= 5000 for c in chunks))
+        self.assertEqual(chunks, ["head\n", "z" * 5000, "z" * 1000 + "\n", "tail"])
+
+    def test_split_chunks_empty(self):
+        self.assertEqual(TencentTranslator._split_chunks(""), [])
 
 
 if __name__ == "__main__":
