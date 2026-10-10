@@ -1057,6 +1057,34 @@ class MiniMaxTranslator(OpenAITranslator):
         self.prompttext = prompt
 
 
+class AtlasCloudTranslator(OpenAITranslator):
+    # https://docs.atlascloud.ai
+    name = "atlascloud"
+    envs = {
+        "ATLASCLOUD_API_KEY": None,
+        "ATLASCLOUD_MODEL": "deepseek-ai/deepseek-v4-flash",
+    }
+    CustomPrompt = True
+
+    def __init__(
+        self, lang_in, lang_out, model, envs=None, prompt=None, ignore_cache=False
+    ):
+        self.set_envs(envs)
+        base_url = "https://api.atlascloud.ai/v1"
+        api_key = self.envs["ATLASCLOUD_API_KEY"]
+        if not model:
+            model = self.envs["ATLASCLOUD_MODEL"]
+        super().__init__(
+            lang_in,
+            lang_out,
+            model,
+            base_url=base_url,
+            api_key=api_key,
+            ignore_cache=ignore_cache,
+        )
+        self.prompttext = prompt
+
+
 class OpenAIlikedTranslator(OpenAITranslator):
     name = "openailiked"
     envs = {

@@ -19,6 +19,7 @@ from tenacity import retry, wait_fixed
 from pdf2zh.text_spacing import add_cjk_latin_spacing
 from pdf2zh.translator import (
     AnythingLLMTranslator,
+    AtlasCloudTranslator,
     ArgosTranslator,
     AzureOpenAITranslator,
     AzureTranslator,
@@ -166,7 +167,7 @@ class TranslateConverter(PDFConverterEx):
         if not envs:
             envs = {}
         for translator in [GoogleTranslator, BingTranslator, DeepLTranslator, DeepLXTranslator, OllamaTranslator, XinferenceTranslator, AzureOpenAITranslator,
-                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, MiniMaxTranslator, OpenAIlikedTranslator, QwenMtTranslator, X302AITranslator]:
+                           OpenAITranslator, ZhipuTranslator, ModelScopeTranslator, SiliconTranslator, GeminiTranslator, AzureTranslator, TencentTranslator, DifyTranslator, AnythingLLMTranslator, ArgosTranslator, GrokTranslator, GroqTranslator, DeepseekTranslator, MiniMaxTranslator, AtlasCloudTranslator, OpenAIlikedTranslator, QwenMtTranslator, X302AITranslator]:
             if service_name == translator.name:
                 self.translator = translator(lang_in, lang_out, service_model, envs=envs, prompt=prompt, ignore_cache=ignore_cache)
         if not self.translator:
