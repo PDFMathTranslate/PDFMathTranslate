@@ -157,6 +157,8 @@ Python環境を事前にインストールする必要はありません
   <img src="https://zeabur.com/button.svg" alt="Deploy on Zeabur" height="26"></a>
 <a href="https://app.koyeb.com/deploy?type=git&builder=buildpack&repository=github.com/Byaidu/PDFMathTranslate&branch=main&name=pdf-math-translate">
   <img src="https://www.koyeb.com/static/images/deploy/button.svg" alt="Deploy to Koyeb" height="26"></a>
+<a href="https://pethost.dev/templates/pdfmathtranslate/">
+  <img src="https://pethost.dev/button.svg" alt="Deploy on Pethost" height="26"></a>
 </div>
 
 <h2 id="usage">高度なオプション</h2>

@@ -166,6 +166,8 @@ pip install pdf2zh
   <img src="https://sealos.io/Deploy-on-Sealos.svg" alt="在 Sealos 上部署" height="26"></a>
 <a href="https://app.koyeb.com/deploy?type=git&builder=buildpack&repository=github.com/Byaidu/PDFMathTranslate&branch=main&name=pdf-math-translate">
   <img src="https://www.koyeb.com/static/images/deploy/button.svg" alt="部署到 Koyeb" height="26"></a>
+<a href="https://pethost.dev/templates/pdfmathtranslate/">
+  <img src="https://pethost.dev/button.svg" alt="在 Pethost 上部署" height="26"></a>
 </div>
 
 </details>
