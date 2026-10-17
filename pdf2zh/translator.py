@@ -1168,6 +1168,7 @@ class QwenMtTranslator(OpenAITranslator):
         """
         langdict = {
             "zh": "Chinese",
+            "zh-CN": "Chinese",
             "zh-TW": "Chinese",
             "en": "English",
             "fr": "French",
