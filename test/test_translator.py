@@ -1,10 +1,11 @@
+import importlib
 import unittest
 from textwrap import dedent
 from unittest import mock
 
 from ollama import ResponseError as OllamaResponseError
 
-from pdf2zh import cache
+from pdf2zh import cache, translator as translator_module
 from pdf2zh.config import ConfigManager
 from pdf2zh.translator import BaseTranslator, OllamaTranslator, OpenAIlikedTranslator
 
@@ -218,6 +219,40 @@ class TestOllamaTranslator(unittest.TestCase):
         self.assertEqual(
             excepted_not_retain_cot_content, only_removed_cot_content.strip()
         )
+
+
+class TestTencentLazyImport(unittest.TestCase):
+    """The Tencent SDK must only be imported when the engine is actually used."""
+
+    @staticmethod
+    def _block_tencent_imports(real_import):
+        def _blocked(name, *args, **kwargs):
+            if name == "tencentcloud" or name.startswith("tencentcloud."):
+                raise ModuleNotFoundError(name)
+            return real_import(name, *args, **kwargs)
+
+        return _blocked
+
+    def test_module_imports_without_tencent_sdk(self):
+        # Restore the module namespace after reload so other tests keep
+        # using the same translator classes, regardless of test order.
+        with mock.patch.dict(translator_module.__dict__):
+            with mock.patch(
+                "builtins.__import__",
+                side_effect=self._block_tencent_imports(__import__),
+            ):
+                reloaded = importlib.reload(translator_module)
+                self.assertIsNotNone(reloaded.BaseTranslator)
+
+    def test_tencent_translator_raises_informative_error_without_sdk(self):
+        with mock.patch(
+            "builtins.__import__",
+            side_effect=self._block_tencent_imports(__import__),
+        ):
+            with self.assertRaises(ImportError) as context:
+                translator_module.TencentTranslator("en", "zh", "", False)
+        self.assertIn("tencentcloud-sdk-python-tmt==3.1.70", str(context.exception))
+        self.assertIsInstance(context.exception.__cause__, ModuleNotFoundError)
 
 
 if __name__ == "__main__":
