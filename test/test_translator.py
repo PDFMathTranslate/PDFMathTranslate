@@ -220,5 +220,33 @@ class TestOllamaTranslator(unittest.TestCase):
         )
 
 
+    def test_ollama_do_translate_dict_error_response(self):
+        # Regression test for #981: some ollama servers return an error payload
+        # as HTTP 200 (e.g. {"error": "model ... not found"}), in which case
+        # client.chat() yields that dict instead of raising. Accessing .message
+        # on it used to raise a cryptic
+        # "AttributeError: 'dict' object has no attribute 'message'".
+        # do_translate must surface the real error instead.
+        translator = OllamaTranslator("en", "zh", "gemma2", ignore_cache=True)
+        with mock.patch.object(
+            translator.client,
+            "chat",
+            return_value={"error": "model 'gemma2' not found"},
+        ):
+            with self.assertRaises(RuntimeError) as ctx:
+                translator.do_translate("hello")
+            self.assertIn("model 'gemma2' not found", str(ctx.exception))
+
+    def test_ollama_do_translate_success_path(self):
+        # The normal (non-dict) response path must keep working unchanged.
+        translator = OllamaTranslator("en", "zh", "gemma2", ignore_cache=True)
+        good_response = mock.Mock()
+        good_response.message.content = "你好"
+        with mock.patch.object(
+            translator.client, "chat", return_value=good_response
+        ):
+            self.assertEqual(translator.do_translate("hello"), "你好")
+
+
 if __name__ == "__main__":
     unittest.main()
