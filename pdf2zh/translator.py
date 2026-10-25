@@ -88,6 +88,17 @@ class BaseTranslator:
         """
         self.cache.add_params(k, v)
 
+    def set_prompt(self, prompt: Template | None):
+        """Set the custom prompt and register it as a cache-impacting parameter.
+
+        Subclasses that accept a ``prompt`` argument must call this *after*
+        ``super().__init__()``. Assigning ``self.prompttext`` directly would
+        leave the cache key holding the default prompt, so changing ``--prompt``
+        would silently return translations cached under a different prompt.
+        """
+        self.prompttext = prompt
+        self.add_cache_impact_parameters("prompt", self.prompt("", prompt))
+
     def translate(self, text: str, ignore_cache: bool = False) -> str:
         """
         Translate the text, and the other part should call this method.
@@ -355,7 +366,7 @@ class XinferenceTranslator(BaseTranslator):
         super().__init__(lang_in, lang_out, model, ignore_cache)
         self.options = {"temperature": 0}  # 随机采样可能会打断公式标记
         self.client = xinference_client.RESTfulClient(self.envs["XINFERENCE_HOST"])
-        self.prompttext = prompt
+        self.set_prompt(prompt)
         self.add_cache_impact_parameters("temperature", self.options["temperature"])
 
     def do_translate(self, text):
@@ -439,11 +450,10 @@ class OpenAITranslator(BaseTranslator):
             base_url=base_url or self.envs["OPENAI_BASE_URL"],
             api_key=api_key or self.envs["OPENAI_API_KEY"],
         )
-        self.prompttext = prompt
+        self.set_prompt(prompt)
         self.add_cache_impact_parameters("temperature", self.options["temperature"])
         self.add_cache_impact_parameters("stop", self.options.get("stop"))
         self.add_cache_impact_parameters("max_tokens", self.options.get("max_tokens"))
-        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
         think_filter_regex = r"^<think>.+?\n*(</think>|\n)*(</think>)\n*"
         self.add_cache_impact_parameters("think_filter_regex", think_filter_regex)
         self.think_filter_regex = re.compile(think_filter_regex, flags=re.DOTALL)
@@ -527,9 +537,8 @@ class AzureOpenAITranslator(BaseTranslator):
             api_version=api_version,
             api_key=api_key,
         )
-        self.prompttext = prompt
+        self.set_prompt(prompt)
         self.add_cache_impact_parameters("temperature", self.options["temperature"])
-        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
 
     def do_translate(self, text) -> str:
         response = self.client.chat.completions.create(
@@ -573,8 +582,7 @@ class ModelScopeTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.prompttext = prompt
-        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+        self.set_prompt(prompt)
 
 
 class ZhipuTranslator(OpenAITranslator):
@@ -602,8 +610,7 @@ class ZhipuTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.prompttext = prompt
-        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+        self.set_prompt(prompt)
 
     def do_translate(self, text) -> str:
         try:
@@ -647,8 +654,7 @@ class SiliconTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.prompttext = prompt
-        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+        self.set_prompt(prompt)
 
 
 class X302AITranslator(OpenAITranslator):
@@ -676,8 +682,7 @@ class X302AITranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.prompttext = prompt
-        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+        self.set_prompt(prompt)
 
 
 class GeminiTranslator(OpenAITranslator):
@@ -705,8 +710,7 @@ class GeminiTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.prompttext = prompt
-        self.add_cache_impact_parameters("prompt", self.prompt("", self.prompttext))
+        self.set_prompt(prompt)
 
 
 class AzureTranslator(BaseTranslator):
@@ -816,7 +820,7 @@ class AnythingLLMTranslator(BaseTranslator):
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        self.prompttext = prompt
+        self.set_prompt(prompt)
 
     def do_translate(self, text):
         messages = self.prompt(text, self.prompttext)
@@ -957,7 +961,7 @@ class GrokTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.prompttext = prompt
+        self.set_prompt(prompt)
         # Override stream setting from config (default to True)
         stream_val = self.envs.get("GROK_STREAM", "true").lower()
         self.stream = stream_val == "true"
@@ -987,7 +991,7 @@ class GroqTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.prompttext = prompt
+        self.set_prompt(prompt)
 
 
 class DeepseekTranslator(OpenAITranslator):
@@ -1014,7 +1018,7 @@ class DeepseekTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.prompttext = prompt
+        self.set_prompt(prompt)
 
 
 class MiniMaxTranslator(OpenAITranslator):
@@ -1043,7 +1047,7 @@ class MiniMaxTranslator(OpenAITranslator):
             ignore_cache=ignore_cache,
         )
         self.options = {"temperature": 0.1}
-        self.prompttext = prompt
+        self.set_prompt(prompt)
 
 
 class OpenAIlikedTranslator(OpenAITranslator):
@@ -1146,7 +1150,7 @@ class QwenMtTranslator(OpenAITranslator):
             api_key=api_key,
             ignore_cache=ignore_cache,
         )
-        self.prompttext = prompt
+        self.set_prompt(prompt)
 
     @staticmethod
     def lang_mapping(input_lang: str) -> str:
