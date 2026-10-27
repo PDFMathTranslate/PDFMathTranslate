@@ -613,10 +613,16 @@ class ZhipuTranslator(OpenAITranslator):
                 messages=self.prompt(text, self.prompttext),
             )
         except openai.BadRequestError as e:
-            if (
-                json.loads(response.choices[0].message.content.strip())["error"]["code"]
-                == "1301"
-            ):
+            # Extract error code from exception body or response
+            error_code = None
+            if hasattr(e, 'body') and isinstance(e.body, dict):
+                error_code = e.body.get('error', {}).get('code')
+            elif hasattr(e, 'response'):
+                try:
+                    error_code = e.response.json().get('error', {}).get('code')
+                except Exception:
+                    pass
+            if error_code == "1301":
                 return "IRREPARABLE TRANSLATION ERROR"
             raise e
         return response.choices[0].message.content.strip()
