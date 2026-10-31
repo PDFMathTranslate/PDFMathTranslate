@@ -158,7 +158,7 @@ class ConfigManager:
         translators = instance._config_data.get("translators", [])
         for translator in translators:
             if translator.get("name") == translater_name.name:
-                if translator["envs"][name]:
+                if translator["envs"].get(name):
                     return translator["envs"][name]
                 else:
                     with instance._lock:
