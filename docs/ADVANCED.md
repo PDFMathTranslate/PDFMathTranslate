@@ -5,6 +5,7 @@
 <h3 id="toc">Table of Contents</h3>
 
 - [Full / partial translation](#partial)
+- [Ultrafast mode](#ultrafast)
 - [Specify source and target languages](#language)
 - [Translate with different services](#services)
 - [Translate wih exceptions](#exceptions)
@@ -30,6 +31,45 @@
   ```bash
   pdf2zh example.pdf -p 1-3,5
   ```
+
+[⬆️ Back to top](#toc)
+
+---
+
+<h3 id="ultrafast">Ultrafast mode</h3>
+
+Install the optional `pdf-inspector>=1.25.2,<2` dependency:
+
+```bash
+pip install 'pdf2zh[ultrafast]'
+```
+
+Then run the CLI with `--ultrafast`:
+
+```bash
+pdf2zh example.pdf --ultrafast
+```
+
+This mode uses native PDF text positions from `pdf-inspector` for heuristic
+layout and skips ONNX layout and OCR; pages without native text are preserved
+without OCR. Its heuristic text grouping retains the usual font and character
+formula safeguards. It is best suited to PDFs that already contain native text;
+use normal mode for complex tables or formulas. It is available only in fast
+CLI mode and cannot be combined with `--mode precise`, `--babeldoc`, server or
+GUI modes, or `--onnx`. It automatically skips font subsetting, so its output
+PDFs are larger, while still using BabelDOC font assets as needed. With
+`--ignore-cache`, it bypasses both translation-cache reads and writes; normal
+mode keeps its existing `--ignore-cache` behavior. Ultrafast uses a shared
+whole-document paragraph worker pool with 16 workers by default and submits
+individual paragraph requests; `-t` overrides this value, while normal mode
+keeps its default of 4. `[ultrafast perf]` INFO logs report stage and per-page
+timings. `page_scan` is the paragraph-submission scan; `translation` is the
+elapsed wait for the whole-document pool to drain, including API retries, so
+it is not a sum of per-page waits. `paragraph_parse` covers both passes,
+`typesetting` runs after translation completes, and `layout_extract` is
+reported separately before font setup. `page_processing` includes nested
+`layout_mask`, `paragraph_parse`, `translation`, and `typesetting` timings, so
+do not sum the nested values again. This path does not import ONNX or OpenCV.
 
 [⬆️ Back to top](#toc)
 

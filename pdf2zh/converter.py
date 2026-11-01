@@ -2,6 +2,7 @@ import concurrent.futures
 import logging
 import re
 import unicodedata
+from time import perf_counter
 from enum import Enum
 from string import Template
 from typing import Dict
@@ -22,6 +23,7 @@ from tenacity import (
     wait_fixed,
 )
 
+from pdf2zh.text_spacing import add_cjk_latin_spacing
 from pdf2zh.translator import (
     AnythingLLMTranslator,
     ArgosTranslator,
@@ -160,6 +162,9 @@ class TranslateConverter(PDFConverterEx):
         self.layout = layout
         self.noto_name = noto_name
         self.noto = noto
+        self.perf = None
+        self.translation_pool = None
+        self.translation_futures = None
         self.translator: BaseTranslator = None
         # e.g. "ollama:gemma2:9b" -> ["ollama", "gemma2:9b"]
         param = service.split(":", 1)
@@ -175,6 +180,7 @@ class TranslateConverter(PDFConverterEx):
             raise ValueError("Unsupported translation service")
 
     def receive_layout(self, ltpage: LTPage):
+        started = perf_counter() if self.perf else 0
         # 段落
         sstk: list[str] = []            # 段落文字栈
         pstk: list[Paragraph] = []      # 段落属性栈
@@ -373,10 +379,24 @@ class TranslateConverter(PDFConverterEx):
                 else:
                     log.exception(e, exc_info=False)
                 raise e
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=self.thread
-        ) as executor:
-            news = list(executor.map(worker, sstk))
+        if self.perf:
+            self.perf.add("paragraph_parse", perf_counter() - started)
+            started = perf_counter()
+        if self.translation_pool is not None:
+            self.translation_futures.extend(self.translation_pool.submit(worker, s) for s in sstk)
+            if self.perf:
+                self.perf.add("translation_submit", perf_counter() - started)
+            return ""  # Typeset after the whole document's requests have completed.
+        if self.translation_futures is not None:
+            news = [self.translation_futures.popleft().result() for _ in sstk]
+        else:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=self.thread
+            ) as executor:
+                news = list(executor.map(worker, sstk))
+        if self.perf:
+            self.perf.add("translation", perf_counter() - started)
+            started = perf_counter()
 
         ############################################################
         # C. 新文档排版
@@ -404,6 +424,7 @@ class TranslateConverter(PDFConverterEx):
             return f"ET q 1 0 0 1 {x:f} {y:f} cm [] 0 d 0 J {linewidth:f} w 0 0 m {xlen:f} {ylen:f} l S Q BT "
 
         for id, new in enumerate(news):
+            new = add_cjk_latin_spacing(new)
             x: float = pstk[id].x                       # 段落初始横坐标
             y: float = pstk[id].y                       # 段落初始纵坐标
             x0: float = pstk[id].x0                     # 段落左边界
@@ -541,6 +562,8 @@ class TranslateConverter(PDFConverterEx):
                 ops_list.append(gen_op_line(l.pts[0][0], l.pts[0][1], l.pts[1][0] - l.pts[0][0], l.pts[1][1] - l.pts[0][1], l.linewidth))
 
         ops = f"BT {''.join(ops_list)}ET "
+        if self.perf:
+            self.perf.add("typesetting", perf_counter() - started)
         return ops
 
 

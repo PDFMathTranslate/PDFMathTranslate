@@ -34,12 +34,15 @@ class LegacyKernel:
         callback: Any = None,
         cancellation_event: Optional[asyncio.Event] = None,
     ) -> list[TranslateResult]:
-        from pdf2zh.doclayout import ModelInstance, OnnxModel
         from pdf2zh.high_level import translate
 
-        # Ensure model is loaded
-        if ModelInstance.value is None:
-            ModelInstance.value = OnnxModel.load_available()
+        model = None
+        if not request.ultrafast:
+            from pdf2zh.doclayout import ModelInstance, OnnxModel
+
+            if ModelInstance.value is None:
+                ModelInstance.value = OnnxModel.load_available()
+            model = ModelInstance.value
 
         # Build kwargs matching high_level.translate() signature
         kwargs: dict[str, Any] = {
@@ -53,11 +56,12 @@ class LegacyKernel:
             "vchar": request.vchar,
             "callback": callback,
             "cancellation_event": cancellation_event,
-            "model": ModelInstance.value,
+            "model": model,
             "envs": request.envs or {},
             "skip_subset_fonts": request.skip_subset_fonts,
             "ignore_cache": request.ignore_cache,
             "compatible": request.compatible,
+            "ultrafast": request.ultrafast,
         }
 
         if request.pages and isinstance(request.pages, list):

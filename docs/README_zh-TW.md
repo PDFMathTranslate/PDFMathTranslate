@@ -45,6 +45,7 @@
 
 <h2 id="updates">近期更新</h2>
 
+- [2026年10月2日] 新增命令列 `--ultrafast` 模式：使用 `pdf-inspector` 提供的 PDF 原生文字位置進行啟發式版面配置，跳過 ONNX 版面解析和 OCR，適用於包含原生文字的 PDF。
 - [Dec. 24 2024] 翻譯功能支援接入由 [Xinference](https://github.com/xorbitsai/inference) 執行的本機 LLM _(by [@imClumsyPanda](https://github.com/imClumsyPanda))_
 - [Nov. 26 2024] CLI 現在已支援（多個）線上 PDF 檔 *(by [@reycn](https://github.com/reycn))*  
 - [Nov. 24 2024] 為了降低依賴大小，提供 [ONNX](https://github.com/onnx/onnx) 支援 *(by [@Wybxc](https://github.com/Wybxc))*  
@@ -176,12 +177,15 @@ set HF_ENDPOINT=https://hf-mirror.com
 | `-t`  | [多執行緒](#threads) | `pdf2zh example.pdf -t 1` |
 | `-o`  | 輸出目錄 | `pdf2zh example.pdf -o output` |
 | `-f`, `-c` | [例外規則](#exceptions) | `pdf2zh example.pdf -f "(MS.*)"` |
+| `--ultrafast` | 使用 `pdf-inspector` 的 PDF 原生文字位置進行啟發式版面配置，跳過 ONNX 版面解析和 OCR（適用於包含原生文字的 PDF） | `pdf2zh example.pdf --ultrafast` |
 | `--share` | [獲取 gradio 公開連結] | `pdf2zh -i --share` |
 | `--authorized` | [[添加網頁認證及自訂認證頁面](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.)] | `pdf2zh -i --authorized users.txt [auth.html]` |
 | `--prompt` | [使用自訂的大模型 Prompt] | `pdf2zh --prompt [prompt.txt]` |
 | `--onnx` | [使用自訂的 DocLayout-YOLO ONNX 模型] | `pdf2zh --onnx [onnx/model/path]` |
 | `--serverport` | [自訂 WebUI 埠號] | `pdf2zh --serverport 7860` |
 | `--dir` | [資料夾翻譯] | `pdf2zh --dir /path/to/translate/` |
+
+`--ultrafast` 需要 `pdf-inspector>=1.25.2,<2` 可選依賴：`pip install 'pdf2zh[ultrafast]'`。此模式使用 PDF 原生文字位置進行啟發式版面配置；沒有原生文字的頁面會保留且不會執行 OCR。啟發式文字分組仍保留一般的字型和字元公式保護規則；對於複雜表格或公式，請使用一般模式。此模式僅支援 fast 命令列模式，不能與 `--mode precise`、`--babeldoc`、伺服器或圖形使用者介面模式以及 `--onnx` 一起使用。它會自動跳過字型子集化，因此輸出的 PDF 較大，但仍會按需使用 BabelDOC 的字型資源。`--ultrafast --ignore-cache` 會同時跳過翻譯快取的讀取與寫入；一般模式的 `--ignore-cache` 語義不變。Ultrafast 預設使用 16 個 worker 建立整份文件共用的段落任務池，每次請求單一段落；`-t` 可覆寫此值，一般模式預設仍為 4。INFO 記錄會自動輸出 `[ultrafast perf]` 的分階段和逐頁耗時。`page_scan` 表示提交段落任務的掃描；`translation` 表示等待整份文件共用任務池排空的耗時（包括 API 重試），不能透過相加逐頁等待時間重建。`paragraph_parse` 涵蓋兩次解析，`typesetting` 在翻譯完成後執行，`layout_extract` 會在字型設定前單獨報告。`page_processing` 包含巢狀的 `layout_mask`、`paragraph_parse`、`translation` 和 `typesetting` 耗時，請勿將巢狀值再次相加。此路徑不會匯入 ONNX 或 OpenCV。
 
 <h3 id="partial">全文或部分文件翻譯</h3>
 

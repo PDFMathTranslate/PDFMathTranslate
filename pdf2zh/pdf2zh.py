@@ -96,8 +96,8 @@ def create_parser() -> argparse.ArgumentParser:
         "--thread",
         "-t",
         type=int,
-        default=4,
-        help="The number of threads to execute translation.",
+        default=None,
+        help="Translation workers: default 4, or 16 with --ultrafast.",
     )
     parse_params.add_argument(
         "--interactive",
@@ -137,6 +137,12 @@ def create_parser() -> argparse.ArgumentParser:
         "-cp",
         action="store_true",
         help="Convert the PDF file into PDF/A format to improve compatibility.",
+    )
+
+    parse_params.add_argument(
+        "--ultrafast",
+        action="store_true",
+        help="Use pdf-inspector text layout without neural layout models or OCR.",
     )
 
     parse_params.add_argument(
@@ -212,7 +218,25 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def parse_args(args: Optional[List[str]]) -> argparse.Namespace:
-    parsed_args = create_parser().parse_args(args=args)
+    parser = create_parser()
+    parsed_args = parser.parse_args(args=args)
+    if parsed_args.thread is None:
+        parsed_args.thread = 16 if parsed_args.ultrafast else 4
+    if parsed_args.thread < 1:
+        parser.error("--thread must be at least 1")
+    if parsed_args.ultrafast and (
+        parsed_args.mode != "fast"
+        or parsed_args.babeldoc
+        or parsed_args.onnx
+        or parsed_args.interactive
+        or parsed_args.flask
+        or parsed_args.celery
+        or parsed_args.mcp
+        or parsed_args.sse
+    ):
+        parser.error(
+            "--ultrafast requires fast CLI mode without --onnx or server options"
+        )
 
     if parsed_args.pages:
         pages = []
@@ -277,14 +301,14 @@ def main(args: Optional[List[str]] = None) -> int:
     if parsed_args.debug:
         log.setLevel(logging.DEBUG)
 
-    from pdf2zh.doclayout import ModelInstance, OnnxModel, set_backend
+    if not parsed_args.ultrafast:
+        from pdf2zh.doclayout import ModelInstance, OnnxModel, set_backend
 
-    set_backend(parsed_args.backend)
-
-    if parsed_args.onnx:
-        ModelInstance.value = OnnxModel(parsed_args.onnx)
-    else:
-        ModelInstance.value = OnnxModel.load_available()
+        set_backend(parsed_args.backend)
+        if parsed_args.onnx:
+            ModelInstance.value = OnnxModel(parsed_args.onnx)
+        else:
+            ModelInstance.value = OnnxModel.load_available()
 
     if parsed_args.interactive:
         from pdf2zh.gui import setup_gui
@@ -371,6 +395,7 @@ def main(args: Optional[List[str]] = None) -> int:
         ignore_cache=parsed_args.ignore_cache,
         compatible=parsed_args.compatible,
         debug=parsed_args.debug,
+        ultrafast=parsed_args.ultrafast,
     )
     kernel.translate(request)
     return 0

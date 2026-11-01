@@ -46,6 +46,7 @@
 <h2 id="updates">更新</h2>
 
 
+- [2026年10月2日] 新增命令行 `--ultrafast` 模式：使用 `pdf-inspector` 提供的 PDF 原生文本位置进行启发式布局，跳过 ONNX 布局解析和 OCR，适用于包含原生文本的 PDF。
 - [2026年3月23日] 实验性支持 v2.0 翻译内核，使用隔离环境运行（`--mode precise`）。（由[@reycn](https://github.com/reycn) 提交）
 
 - [2026年3月22日] 支持 MiniMax（由[@octo-patch](https://github.com/octo-patch) 提交的PR）
@@ -242,6 +243,7 @@ $env:HF_ENDPOINT = https://hf-mirror.com
 | `-o`         | 输出目录                                                                                                     | `pdf2zh example.pdf -o output`                 |
 | `-f`, `-c`   | [异常](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#exceptions)                     | `pdf2zh example.pdf -f "(MS.*)"`               |
 | `-cp`        | 兼容模式                                                                                                     | `pdf2zh example.pdf --compatible`              |
+| `--ultrafast` | 使用 `pdf-inspector` 的 PDF 原生文本位置进行启发式布局，跳过 ONNX 布局解析和 OCR（适用于包含原生文本的 PDF） | `pdf2zh example.pdf --ultrafast`              |
 | `--share`    | 公开链接                                                                                                     | `pdf2zh -i --share`                            |
 | `--authorized` | [授权](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#auth)                         | `pdf2zh -i --authorized users.txt [auth.html]` |
 | `--prompt`   | [自定义提示](https://github.com/Byaidu/PDFMathTranslate/blob/main/docs/ADVANCED.md#prompt)                   | `pdf2zh --prompt [prompt.txt]`                 |
@@ -252,6 +254,8 @@ $env:HF_ENDPOINT = https://hf-mirror.com
 | `--serverport` | [自定义 gradio 服务器端口]                                                                                 | `pdf2zh --serverport 7860`                     |
 | `--mode`   | 翻译模式：`fast`（默认，v1）或 `precise`（v2，实验性，需要 pdf2zh_next 子模块）                                | `pdf2zh --mode precise example.pdf`            |
 | `--babeldoc`| 使用实验性后端 [BabelDOC](https://funstory-ai.github.io/BabelDOC/) 翻译 |`pdf2zh --babeldoc` -s openai example.pdf|
+
+`--ultrafast` 需要 `pdf-inspector>=1.25.2,<2` 可选依赖：`pip install 'pdf2zh[ultrafast]'`。该模式使用 PDF 原生文本位置进行启发式布局；没有原生文本的页面会保留且不会执行 OCR。启发式文本分组仍保留常规的字体和字符公式保护规则；对于复杂表格或公式，请使用普通模式。该模式仅支持 fast 命令行模式，不能与 `--mode precise`、`--babeldoc`、服务器或 GUI 模式以及 `--onnx` 一起使用。它会自动跳过字体子集化，因此输出 PDF 更大，但仍会按需使用 BabelDOC 字体资源。`--ultrafast --ignore-cache` 会同时跳过翻译缓存的读取和写入；普通模式的 `--ignore-cache` 语义不变。Ultrafast 默认使用 16 个 worker 建立整篇文档共享的段落任务池，每次请求单个段落；`-t` 可覆盖该值，普通模式默认仍为 4。INFO 日志会自动输出 `[ultrafast perf]` 的分阶段和逐页耗时。`page_scan` 表示提交段落任务的扫描；`translation` 表示等待整篇文档共享任务池排空的耗时（包括 API 重试），不能通过相加逐页等待时间重建。`paragraph_parse` 覆盖两次解析，`typesetting` 在翻译完成后执行，`layout_extract` 会在字体设置前单独报告。`page_processing` 包含嵌套的 `layout_mask`、`paragraph_parse`、`translation` 和 `typesetting` 耗时，请勿将嵌套值再次相加。此路径不会导入 ONNX 或 OpenCV。
 
 有关详细说明，请参阅我们的文档 [高级用法](./ADVANCED.md)，以获取每个选项的完整列表。
 

@@ -1,4 +1,4 @@
-import html
+import asyncio
 import json
 import logging
 import os
@@ -11,6 +11,7 @@ import deepl
 import ollama
 import openai
 import requests
+from googletrans import Translator as GoogleTrans
 import xinference_client
 from azure.ai.translation.text import TextTranslationClient
 from azure.core.credentials import AzureKeyCredential
@@ -49,6 +50,7 @@ class BaseTranslator:
         self.lang_out = lang_out
         self.model = model
         self.ignore_cache = ignore_cache
+        self.no_cache = False
 
         self.cache = TranslationCache(
             self.name,
@@ -92,13 +94,14 @@ class BaseTranslator:
         :param text: text to translate
         :return: translated text
         """
-        if not (self.ignore_cache or ignore_cache):
+        if not (self.ignore_cache or ignore_cache or self.no_cache):
             cache = self.cache.get(text)
             if cache is not None:
                 return cache
 
         translation = self.do_translate(text)
-        self.cache.set(text, translation)
+        if not self.no_cache:
+            self.cache.set(text, translation)
         return translation
 
     def do_translate(self, text: str) -> str:
@@ -169,28 +172,16 @@ class GoogleTranslator(BaseTranslator):
 
     def __init__(self, lang_in, lang_out, model, ignore_cache=False, **kwargs):
         super().__init__(lang_in, lang_out, model, ignore_cache)
-        self.session = requests.Session()
-        self.endpoint = "https://translate.google.com/m"
-        self.headers = {
-            "User-Agent": "Mozilla/4.0 (compatible;MSIE 6.0;Windows NT 5.1;SV1;.NET CLR 1.1.4322;.NET CLR 2.0.50727;.NET CLR 3.0.04506.30)"  # noqa: E501
-        }
 
     def do_translate(self, text):
-        text = text[:5000]  # google translate max length
-        response = self.session.get(
-            self.endpoint,
-            params={"tl": self.lang_out, "sl": self.lang_in, "q": text},
-            headers=self.headers,
-        )
-        re_result = re.findall(
-            r'(?s)class="(?:t0|result-container)">(.*?)<', response.text
-        )
-        if response.status_code == 400:
-            result = "IRREPARABLE TRANSLATION ERROR"
-        else:
-            response.raise_for_status()
-            result = html.unescape(re_result[0])
-        return remove_control_characters(result)
+        async def translate():
+            async with GoogleTrans(raise_exception=True, timeout=20) as translator:
+                result = await translator.translate(
+                    text[:5000], src=self.lang_in, dest=self.lang_out
+                )
+                return remove_control_characters(result.text)
+
+        return asyncio.run(translate())
 
 
 class BingTranslator(BaseTranslator):

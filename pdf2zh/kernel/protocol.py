@@ -18,7 +18,7 @@ class TranslateRequest:
     service: str = "google"
     pages: Optional[list[int] | str] = None
     output: str = ""
-    thread: int = 4
+    thread: Optional[int] = None
     vfont: str = ""
     vchar: str = ""
     prompt: Optional[str] = None
@@ -27,6 +27,11 @@ class TranslateRequest:
     skip_subset_fonts: bool = False
     ignore_cache: bool = False
     compatible: bool = False
+    ultrafast: bool = False
+
+    def __post_init__(self):
+        if self.thread is None:
+            self.thread = 16 if self.ultrafast else 4
 
 
 @dataclass

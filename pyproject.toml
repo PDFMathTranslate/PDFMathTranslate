@@ -12,6 +12,7 @@ classifiers = [
 ]
 dependencies = [
     "requests",
+    "googletrans==4.0.2",
     # for arm64 linux whells
     "pymupdf<1.25.3",
     "tqdm",
@@ -22,15 +23,15 @@ dependencies = [
     "deepl",
     "openai>=1.0.0",
     "azure-ai-translation-text<=1.0.1",
-    # 5.36 has a bug, webui starts with a white screen
-    "gradio<5.36",
+    # >=6.16.0 fixes the gradio 5.x advisories (e.g. CVE-2026-28414)
+    "gradio>=6.16.0,<7",
     "huggingface_hub",
     "onnx",
     "onnxruntime",
     "opencv-python-headless",
     "tencentcloud-sdk-python-tmt==3.1.70",  # newer releases remove TextTranslate
     "pdfminer-six==20250416",
-    "gradio_pdf>=0.0.21",
+    "gradio_pdf>=0.0.24",  # first release supporting gradio 6
     "pikepdf",
     "peewee>=3.17.8",
     "fontTools",
@@ -39,6 +40,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ultrafast = ["pdf-inspector>=1.25.2,<2"]
 ocr = [
     "pooch>=1.8,<2",  # first-use downloads for PyMuPDF's built-in OCR
 ]
