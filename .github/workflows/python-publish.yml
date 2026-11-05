@@ -34,8 +34,10 @@ jobs:
       - run: echo "Running repository check"
       - name: Check if commit is doc-only
         id: check-doc
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          MSG=$(echo "${{ github.event.head_commit.message }}" | head -n 1)
+          MSG=$(printf '%s' "$COMMIT_MESSAGE" | head -n 1)
           if [[ "$MSG" == doc:* ]] || [[ "$MSG" == "doc("* ]]; then
             echo "is_doc_only=true" >> $GITHUB_OUTPUT
           else
