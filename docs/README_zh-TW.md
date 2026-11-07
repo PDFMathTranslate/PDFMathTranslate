@@ -233,7 +233,7 @@ pdf2zh example.pdf -li en -lo ja
 |**Argos Translate**|`argos`| | |參閱 [argos-translate](https://github.com/argosopentech/argos-translate)|
 |**Grok**|`grok`| `GORK_API_KEY`, `GORK_MODEL` | `[Your GORK_API_KEY]`, `grok-2-1212` |參閱 [Grok](https://docs.x.ai/docs/overview)|
 |**DeepSeek**|`deepseek`| `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | `[Your DEEPSEEK_API_KEY]`, `deepseek-chat` |參閱 [DeepSeek](https://www.deepseek.com/)|
-|**MiniMax**|`minimax`| `MINIMAX_API_KEY`, `MINIMAX_MODEL` | `[Your MINIMAX_API_KEY]`, `MiniMax-M2.7` |參閱 [MiniMax](https://platform.minimaxi.com/)|
+|**MiniMax**|`minimax`| `MINIMAX_API_KEY`, `MINIMAX_MODEL`, `MINIMAX_BASE_URL` (optional) | `[Your MINIMAX_API_KEY]`, `MiniMax-M3.1-Flash`, `https://api.minimax.io/v1` |See [MiniMax](https://platform.minimax.io/docs/guides/models-intro). Defaults to `MiniMax-M3.1-Flash`; set `MINIMAX_MODEL=MiniMax-M3` to select M3. Saved and custom model IDs are preserved. Set `MINIMAX_BASE_URL=https://api.minimaxi.com/v1` for the China endpoint, subject to model availability for your account.|
 |**OpenAI-Liked**|`openailiked`| `OPENAILIKED_BASE_URL`, `OPENAILIKED_API_KEY`, `OPENAILIKED_MODEL` | `url`, `[Your Key]`, `model name` | 無 |
 |**OpenAI-Liked**|`openailiked`| `OPENAILIKED_BASE_URL`, `OPENAILIKED_API_KEY`, `OPENAILIKED_MODEL`, `OPENAILIKED_STOP_TOKENS`, `OPENAILIKED_MAX_TOKENS` | `url`, `[Your Key]`, `model name`, ` `, `-1` | 無 |
 
