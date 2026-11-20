@@ -214,6 +214,8 @@ For docker deployment on cloud service:
   <img src="https://sealos.io/Deploy-on-Sealos.svg" alt="Deploy on Sealos" height="26"></a>
 <a href="https://app.koyeb.com/deploy?type=git&builder=buildpack&repository=github.com/Byaidu/PDFMathTranslate&branch=main&name=pdf-math-translate">
   <img src="https://www.koyeb.com/static/images/deploy/button.svg" alt="Deploy to Koyeb" height="26"></a>
+<a href="https://pethost.dev/templates/pdfmathtranslate/">
+  <img src="https://pethost.dev/button.svg" alt="Deploy on Pethost" height="26"></a>
 </div>
 
 > [!TIP]
