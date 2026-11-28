@@ -887,7 +887,8 @@ class ArgosTranslator(BaseTranslator):
             import argostranslate.translate
         except ImportError:
             logger.warning(
-                "argos-translate is not installed, if you want to use argostranslate, please install it. If you don't use argostranslate translator, you can safely ignore this warning."
+                "argos-translate is not installed. To use the Argos Translate translator, "
+                'install it with: pip install "pdf2zh[argostranslate]"'
             )
             raise
         super().__init__(lang_in, lang_out, model, ignore_cache)
@@ -914,10 +915,10 @@ class ArgosTranslator(BaseTranslator):
 
     def translate(self, text: str, ignore_cache: bool = False):
         # Translate
-        import argotranslate.translate  # noqa: F401
+        import argostranslate.translate
 
         installed_languages = (
-            argostranslate.translate.get_installed_languages()  # noqa: F821
+            argostranslate.translate.get_installed_languages()
         )
         from_lang = list(filter(lambda x: x.code == self.lang_in, installed_languages))[
             0
